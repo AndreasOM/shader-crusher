@@ -1,0 +1,18 @@
+namespace="shader_crusher"
+include_guard="SHADER_CRUSHER_INCLUDED"
+braces = "NextLine"
+tab_width = 4
+
+header = """
+#pragma once
+
+// (c) 2019 - Andreas Neukoetter
+
+"""
+
+[defines]
+#"feature = write-support" = "CEREAL_WRITE_SUPPORT"
+#"feature = std" = "CEREAL_STD"
+
+[parse.expand]
+#eatures = ["write-support,std"]
