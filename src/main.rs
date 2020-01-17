@@ -25,6 +25,12 @@ pub fn main() {
 							.help("Set the output filename")
 							.takes_value(true)
 						)
+						.arg(Arg::with_name("blacklist")
+							.long("blacklist")
+							.value_name("BLACKLIST")
+							.help("Add identifiers to blacklist")
+							.takes_value(true)
+						)						
 						.arg(Arg::with_name("dump-input")
 							.long("dump-input")
 							.value_name("DUMP_INPUT")
@@ -46,6 +52,14 @@ pub fn main() {
 		};
 
 		let mut sc = ShaderCrusher::new();
+		match sub_matches.value_of( "blacklist" ){
+			None => {},
+			Some( bl ) => {
+				for n in bl.split(",") {
+					sc.blacklist_identifier( &n );
+				}
+			},
+		};
 		sc.set_input( &data );
 		sc.crush();
 		if output.len() == 0 {

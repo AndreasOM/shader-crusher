@@ -7,7 +7,9 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
-crate-type = ["rlib", "staticlib"]
+# crate-type = ["rlib", "staticlib"]
+# crate-type = ["cdylib"]
+crate-type = ["rlib", "staticlib", "dylib"]
 
 [dependencies]
 clap = { version= "~2.33" }
@@ -15,5 +17,8 @@ entropy = { version="0.3.0" }
 glsl = { version="4.0" }
 libc = { version="0.2.66" }
 regex = { version="~1.3" }
+
+[build-dependencies]
+
 [replace]
 #"glsl:4.0.0" = { path = 'vendor/glsl' }

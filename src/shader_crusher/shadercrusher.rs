@@ -12,6 +12,8 @@ use glsl::visitor::{Host, Visit, Visitor};
 
 use regex::Regex;
 
+include!(concat!(env!("OUT_DIR"), "/glsl_keywords.rs"));
+
 struct IdentEntry{
 	crushed_name: String,
 	count: u32,
@@ -52,16 +54,39 @@ impl IdentMap{
 			entries: HashMap::new(),
 		}
 	}
-	fn crush(&mut self) {
+	fn contains(&self, k: &str ) -> bool {
+		self.entries.contains_key( k )
+	}
+	fn keys(&self) -> Vec<String> {
+//		users.iter().map(|(_, user)| &user.reference.clone()).collect();
+		self.entries.iter().map(|(k,v)| k.into() ).collect()
+//			self.entries.iter().map( |k, v| k )
+//		self.entries.keys().map( |e| e.clone() ).to_vec()
+	}
+	fn crush(&mut self, used_identifiers: Vec<String>, blacklist: &Vec<String> ) {
 		let mut candidates = Vec::new();
 		// :TODO: be smarter ;)
 		// :TODO: e.g. count frequency of characters in input and use most used ones
 		// :TODO: provide more than 26 candidates, or generate them on the fly when needed
 		for c in (b'a'..=b'z').rev() {
 			let c = c as char;
+			for c2 in (b'a'..=b'z').rev() {
+				let c2 = c2 as char;
+				candidates.push( format!("{}{}", c, c2 ).to_string() );
+			}
+		}
+		for c in (b'a'..=b'z').rev() {
+			let c = c as char;
 			candidates.push( c.to_string() );
 		}
-		println!("Best candidates {:?}", candidates );
+		// filter out used identifiers to avoid unwanted aliasing
+		let mut candidates = candidates.into_iter().filter(
+			|n|
+			!used_identifiers.contains( &n ) && !blacklist.contains( &n )
+		).collect::<Vec<String>>();
+
+//		println!("Used identifiers {:?}", used_identifiers );
+//		println!("Best candidates {:?}", candidates );
 //		let mut count_index: Vec<(&String, &u32)> = self.entries.iter().map(|a|
 //			(a.0, &a.1.count)	// :TODO: count might be a bit simplistic here, total "cost" might be a better measure
 //		).collect::<Vec<(&String, &u32)>>().clone();
@@ -76,7 +101,7 @@ impl IdentMap{
 				a.0.cmp(&b.0)
 			}
 		);
-		println!("{:?}", count_index);
+//		println!("{:?}", count_index);
 		for k in count_index {
 			match self.entries.get_mut( &k.0 ) {
 				None => {}, // :WTF:
@@ -85,7 +110,7 @@ impl IdentMap{
 						None => e.crushed_name.clone(),
 						Some( cn ) => cn,
 					};
-					println!("Crushing {:?} to {:?}", e, cn );
+//					println!("Crushing {:?} to {:?}", e, cn );
 					e.set_crushed_name( &cn );
 				}
 			}
@@ -94,9 +119,10 @@ impl IdentMap{
 	fn get_crushed_name(&self, n: &str ) -> Option< String > {
 		self.entries.get( n ).map(|a| a.crushed_name.clone() )
 	}
-	fn add( &mut self, n: &str ) {
+	fn add( &mut self, n: &str ) -> u32 {
 		let mut e = self.entries.entry(n.to_string()).or_insert_with(||IdentEntry::new( &n ));
 		e.count += 1;
+		e.count
 	}
 }
 
@@ -126,7 +152,7 @@ impl Counter {
 	}
 
 	pub fn crush_names( &mut self ) {
-		self.identifiers_crushed.crush();
+		self.identifiers_crushed.crush( self.identifiers_uncrushed.keys().to_vec(), &self.blacklist );
 	}
 }
 impl Visitor for Counter {
@@ -160,6 +186,61 @@ impl Visitor for Counter {
 		Visit::Children
 	}
 	*/
+	fn visit_preprocessor_define(&mut self, pd: &mut PreprocessorDefine) -> Visit {
+//		println!("Define: {:?} - {:?}", pd, self.crushing );
+		match pd {
+			PreprocessorDefine::ObjectLike { ident, value } => {
+				println!("{:?}", ident );
+				match ident {
+					Identifier( i ) => {
+						println!("{:?}", i );
+						match self.phase {
+							CounterPhase::Crushing => {
+							},
+							CounterPhase::Analysing => {
+								let c = self.crushing;
+								self.crushing = false;
+								// :HACK: always add #define identifiers as uncrushed, so we don't have to parse all potential usages
+								self.add_identifier( &i );
+								self.crushing = c;
+							}
+						}
+					},
+					_ => {
+
+					},
+				}
+			},
+			PreprocessorDefine::FunctionLike { ident, args, value } => {
+				println!("{:?}", ident );
+				match ident {
+					Identifier( i ) => {
+						println!("{:?}", i );
+						match self.phase {
+							CounterPhase::Crushing => {
+							},
+							CounterPhase::Analysing => {
+								let c = self.crushing;
+								self.crushing = false;
+								// :HACK: always add #define identifiers as uncrushed, so we don't have to parse all potential usages
+								self.add_identifier( &i );
+								self.crushing = c;
+							}
+						}
+					},
+					_ => {
+
+					},
+				}
+			},
+			x => {
+				println!("{:?}", x);
+			},
+
+		};
+		Visit::Children
+	}
+
 	fn visit_preprocessor_pragma(&mut self, pragma: &mut PreprocessorPragma) -> Visit {
 
 //		println!("Pragma: {:?} - {:?}", pragma, self.crushing );
@@ -181,7 +262,7 @@ impl Visitor for Counter {
 		Visit::Children
 	}
 	fn visit_identifier(&mut self, e: &mut Identifier) -> Visit {
-//		println!("Expr: {:?}", e );
+//		println!("Identifier: {:?}", e );
 		match e {
 			Identifier( i ) => {
 				match self.phase {
@@ -189,7 +270,7 @@ impl Visitor for Counter {
 //						println!("Expr Identifier {:?}", i );
 						match self.identifiers_crushed.get_crushed_name( i ) {
 							Some( n ) => {
-								println!("Identifier: Found {:?} for {:?}", n, i );
+								println!("Identifier: Replacing {:?} with {:?}", i, n );
 								*e = Identifier( n.to_string() );
 							},
 							None => {
@@ -198,7 +279,7 @@ impl Visitor for Counter {
 						}
 					},
 					CounterPhase::Analysing => {
-						// do nothing
+						self.add_identifier( &i );
 					}
 				}
 			},
@@ -208,53 +289,71 @@ impl Visitor for Counter {
 		}
 		Visit::Children
 	}
-	// we are only interested in single declaration with a name
+	fn visit_type_name(&mut self, tn: &mut TypeName) -> Visit {
+//		println!("TypeName {:#?}", tn );
+		match tn {
+			TypeName( i ) => {
+				match self.phase {
+					CounterPhase::Crushing => {
+//						println!("Expr Identifier {:?}", i );
+						match self.identifiers_crushed.get_crushed_name( i ) {
+							Some( n ) => {
+								println!("TypeName/Identifier: Replacing {:?} with {:?}", i, n );
+								*tn = TypeName( n.to_string() );
+							},
+							None => {
+//								println!("No crushed version of {:?} found", i );
+							},
+						}
+					},
+					CounterPhase::Analysing => {
+						self.add_identifier( &i );
+					}
+				}
+			},
+			_ => {
+
+			},
+		}
+    	Visit::Children
+	}
+/*
 	fn visit_single_declaration(&mut self, declaration: &mut SingleDeclaration) -> Visit {
 //		println!("{:#?}", declaration );
+		println!("SingleDeclaration: {:#?}", declaration );
 		match &declaration.name {
 			None => {
 
 			},
 			Some( name ) => {
-				println!("{:?}", name );
+				println!("declaration.name {:?}", name );
 				let n = name.to_string();
 				match self.phase {
 					CounterPhase::Analysing => {
 						self.add_identifier( &n );
 					},
 					CounterPhase::Crushing => {
-/*						
-						match self.identifiers_crushed.get_crushed_name( &n ) {
-							Some( cn ) => {
-								println!("Declaration: Found {:?} for {:?}", cn, n );
-// NOPE								declaration.name = Some( Identifier( cn.to_string() ) );
-							},
-							None => {
-								println!("No crushed version of {:?} found", n );
-							},
-						}
-*/
 					}
 				}
 			},
 		}
-	// do not go deeper
-//		Visit::Parent
-	// DO go deeper
 		Visit::Children
+//		Visit::Parent
 	}
+*/
 	/*
 	fn visit_arrayed_identifier(&mut self, ai: &mut ArrayedIdentifier) -> Visit {
 		println!("visit_arrayed_identifier {:?}", ai );
 		Visit::Children
 	}
 	*/
+/*	
 	fn visit_function_prototype(&mut self, fp: &mut FunctionPrototype) -> Visit {
 //		println!("{:?}", fp );
 //		println!("{}", fp.name );
 		match self.phase {
 			CounterPhase::Analysing => {
-//q				self.add_identifier( &fp.name.as_str() );
+//				self.add_identifier( &fp.name.as_str() );
 			},
 			CounterPhase::Crushing => {
 				/* :TODO:
@@ -273,18 +372,38 @@ impl Visitor for Counter {
 		}
 		Visit::Children
 	}
-
+*/
 }
 
 impl Counter {
 	fn add_identifier( &mut self, n: &str ) {
 		let blacklisted = self.blacklist.contains( &n.to_string() );
-		if self.crushing && !blacklisted {
-			self.identifiers_crushed.add( &n );
+		let uncrushed = self.identifiers_uncrushed.contains( &n.to_string() );
+		if self.crushing && !blacklisted && !uncrushed {
+			let c = self.identifiers_crushed.add( &n );
+			println!("{: >8} x {: <20} [-crushed-] {} {} {}",
+				c,
+				&n,
+				if self.crushing { "[--CRUSHING--]" } else { "[NOT CRUSHING]" },
+				if blacklisted { "[--BLACKLISTED--]" } else { "[NOT BLACKLISTED]" },
+				if uncrushed { "[--UNCRUSHED--]" } else { "[NOT UNCRUSHED]" },
+			);
 		} else {
-			self.identifiers_uncrushed.add( &n );
+			let c = self.identifiers_uncrushed.add( &n );
+			println!("{: >8} x {: <20} [uncrushed] {} {} {}",
+				c,
+				&n,
+				if self.crushing { "[--CRUSHING--]" } else { "[NOT CRUSHING]" },
+				if blacklisted { "[--BLACKLISTED--]" } else { "[NOT BLACKLISTED]" },
+				if uncrushed { "[--UNCRUSHED--]" } else { "[NOT UNCRUSHED]" },
+			);
 		}
-	}	
+	}
+	fn blacklist_identifier( &mut self, n: &str ) {
+		if !self.blacklist.contains( &n.to_string() ) {
+			self.blacklist.push( n.to_string() );
+		}
+	}
 }
 
 pub struct ShaderCrusher {
@@ -292,17 +411,26 @@ pub struct ShaderCrusher {
 	output: String,
 	input_entropy: f32,
 	output_entropy: f32,
+	blacklist: Vec<String>,
 }
 
 impl ShaderCrusher {
 	pub fn new() -> ShaderCrusher {
+		let blacklist = GlslKeywords::get();
 		ShaderCrusher {
 			input: String::new(),
 			output: String::new(),
 			input_entropy: 0.0,
 			output_entropy: 0.0,
+			blacklist: blacklist,
 		}
 	}
+	pub fn blacklist_identifier( &mut self, n: &str ) {
+		if !self.blacklist.contains( &n.to_string() ) {
+			self.blacklist.push( n.to_string() );
+		}
+	}
+
 	fn recalc_entropy( &mut self ) {
 //		self.input_entropy = entropy::shannon_entropy( self.input.as_bytes() );
 //		self.output_entropy = entropy::shannon_entropy( self.output.as_bytes() );
@@ -343,6 +471,10 @@ impl ShaderCrusher {
 
 //		let mut compound = stage.clone();
 		let mut counter = Counter::new();
+//		println!("Blacklist {:?}", self.blacklist );
+		for n in &self.blacklist {
+			counter.blacklist_identifier( n );
+		};
 		stage.visit(&mut counter);
 		counter.crush_names();
 		// :TODO: fixup crushed identifiers names
@@ -393,7 +525,7 @@ impl ShaderCrusher {
 				format!("({}", inner).clone()
 			}
 		);
-println!("====");
+//println!("====");
 		let re = Regex::new(r"(?m)\(\(([a-zA-Z0-9.]+)\)").unwrap();
 		let glsl_buffer = re.replace_all(
 			&glsl_buffer,
@@ -405,7 +537,7 @@ println!("====");
 			}
 		);
 
-println!("====");
+//println!("====");
 
 //		let re = Regex::new(r"(?m)([\n\s-+*]+)\(([a-zA-Z0-9.]+)\)").unwrap();
 //		let re = Regex::new(r"(?m)([\n[[:space:]]-+*]+)\(([a-zA-Z0-9.]+)\)").unwrap();
@@ -416,10 +548,10 @@ println!("====");
 		let glsl_buffer = re.replace_all(
 			&glsl_buffer,
 			|c: &regex::Captures|{
-				println!("{:?}", c );
+//				println!("{:?}", c );
 				let prefix = c.get(1).map_or("", |m| m.as_str() );
 				let inner = c.get(2).map_or("", |m| m.as_str() );
-				println!("{}{}", prefix, inner );
+//				println!("{}{}", prefix, inner );
 				format!("{}{}", prefix, inner).clone()
 			}
 		);
@@ -462,4 +594,43 @@ pub extern fn shadercrusher_set_input(ptr: *mut ShaderCrusher, input: *const c_c
 	};
 	let input = input.to_str().unwrap();
 	shadercrusher.set_input( input );
+}
+/*
+#[no_mangle]
+pub extern fn theme_song_free(s: *mut c_char) {
+    unsafe {
+        if s.is_null() { return }
+        CString::from_raw(s)
+    };
+}
+*/
+#[no_mangle]
+pub extern fn shadercrusher_get_ouput(ptr: *mut ShaderCrusher) -> *mut c_char {
+	let shadercrusher = unsafe {
+	    assert!(!ptr.is_null());
+	    &mut *ptr
+	};
+	let output = shadercrusher.get_output( );
+
+	let output_cs = std::ffi::CString::new(output).unwrap();
+    output_cs.into_raw()
+}
+
+#[no_mangle]
+pub extern fn shadercrusher_free_ouput(ptr: *mut ShaderCrusher, output_cs: *mut c_char) {
+    unsafe {
+        if output_cs.is_null() {
+        	return
+        }
+        std::ffi::CString::from_raw(output_cs)
+    };
+}
+
+#[no_mangle]
+pub extern fn shadercrusher_crush(ptr: *mut ShaderCrusher) {
+	let shadercrusher = unsafe {
+	    assert!(!ptr.is_null());
+	    &mut *ptr
+	};
+	shadercrusher.crush();
 }
