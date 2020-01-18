@@ -1,6 +1,10 @@
 # Danger - Status
 Works for me, but might wipe your harddisk.
 
+[![Windows Status](https://github.com/AndreasOM/shader-crusher/workflows/Rust-Windows/badge.svg)]
+[![MacOS Status](https://github.com/AndreasOM/shader-crusher/workflows/Rust-MacOS/badge.svg)]
+[![Linux Status](https://github.com/AndreasOM/shader-crusher/workflows/Rust-Linux/badge.svg)]
+
 # What?
 
 Takes a glsl shader, removes white space, comments, etc, and replaces symbols/identifiers/type names by shorter ones that compress better.
