@@ -57,4 +57,6 @@ fn main() {
         	}
     	}
     ").unwrap();
+
+    println!("cargo:rerun-if-changed=src/glsl_keywords.txt");
 }
