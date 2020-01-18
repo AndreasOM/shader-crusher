@@ -1,9 +1,9 @@
 # Danger - Status
 Works for me, but might wipe your harddisk.
 
-[![Windows Status](https://github.com/AndreasOM/shader-crusher/workflows/Rust-Windows/badge.svg)]
-[![MacOS Status](https://github.com/AndreasOM/shader-crusher/workflows/Rust-MacOS/badge.svg)]
-[![Linux Status](https://github.com/AndreasOM/shader-crusher/workflows/Rust-Linux/badge.svg)]
+![Windows Status](https://github.com/AndreasOM/shader-crusher/workflows/Rust-Windows/badge.svg)
+![MacOS Status](https://github.com/AndreasOM/shader-crusher/workflows/Rust-MacOS/badge.svg)
+![Linux Status](https://github.com/AndreasOM/shader-crusher/workflows/Rust-Linux/badge.svg)
 
 # What?
 
