@@ -14,7 +14,7 @@ crate-type = ["rlib", "staticlib", "dylib"]
 [dependencies]
 clap = { version= "~2.33" }
 entropy = { version="0.3.0" }
-glsl = { version="4.0" }
+glsl = { version="~4.0" }
 libc = { version="0.2.66" }
 regex = { version="~1.3" }
 
