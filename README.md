@@ -90,7 +90,7 @@ shader_crusher::shadercrusher_free( pShaderCrusher );
 
 - Run this against your shader, and see if it breaks anything, and what compression ratio you get.
 - Fix [#52](https://github.com/phaazon/glsl/issues/52) in the glsl crate (too many braces).
-- Fix [#110](https://github.com/phaazon/glsl/issues/110) in the glsl crate (whitespace in defines).
+- ~~Fix [#110](https://github.com/phaazon/glsl/issues/110) in the glsl crate (whitespace in defines).~~
 - The swizzling blacklist is totally wrong, but gets the job done for now.
 - '#define's could be fixed, but I was lazy.
 
