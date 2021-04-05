@@ -1,10 +1,17 @@
 [package]
 name = "shader-crusher"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Andreas Neukoetter <andreas@omni-mad.com>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+license = "MIT"
+description = "A little helper to optimize glsl shaders for size."
+readme = "README.md"
+homepage = "https://github.com/AndreasOM/shader-crusher"
+repository = "https://github.com/AndreasOM/shader-crusher"
+keywords = ["tools", "gamedev"]
+categories = ["command-line-utilities","compression","graphics"]
 
 [lib]
 # crate-type = ["rlib", "staticlib"]
