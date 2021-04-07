@@ -13,6 +13,10 @@ repository = "https://github.com/AndreasOM/shader-crusher"
 keywords = ["tools", "gamedev"]
 categories = ["command-line-utilities","compression","graphics"]
 
+[[bin]]
+name="shader-crusher"
+path="src/main.rs"
+
 [lib]
 # crate-type = ["rlib", "staticlib"]
 # crate-type = ["cdylib"]
