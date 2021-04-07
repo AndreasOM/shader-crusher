@@ -99,7 +99,9 @@ void main()
 		sc.set_input( &input );
 		println!("Input         : >\n{:?}\n<", input );
 		println!("Output        : >\n{:?}\n<", sc.get_output() );
+		println!("---");
 		sc.crush();
+		println!("---");
 		println!("Input         : >\n{:?}\n<", input );
 		println!("Crushed Output: >\n{:?}\n<", sc.get_output() );
 		println!("Crushed Output: >\n{}\n<", sc.get_output() );
