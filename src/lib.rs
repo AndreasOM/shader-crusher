@@ -3,5 +3,5 @@
 
 mod shader_crusher;
 
-pub use shader_crusher::ShaderCrusher as ShaderCrusher;
+pub use crate::shader_crusher::ShaderCrusher as ShaderCrusher;
 
