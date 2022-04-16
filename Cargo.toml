@@ -20,7 +20,7 @@ path="src/main.rs"
 [lib]
 # crate-type = ["rlib", "staticlib"]
 # crate-type = ["cdylib"]
-crate-type = ["rlib", "staticlib", "dylib"]
+# crate-type = ["rlib", "staticlib", "dylib"]
 
 [dependencies]
 clap = { version= "2.33" }
