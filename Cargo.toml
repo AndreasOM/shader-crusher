@@ -27,7 +27,7 @@ clap = { version= "2.34" }
 entropy = { version="0.4.1" }
 glsl = { version="~4.0" }
 libc = { version="0.2.123" }
-regex = { version="1.5" }
+regex = { version="1.5.5" }
 
 [build-dependencies]
 
