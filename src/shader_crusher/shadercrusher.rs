@@ -8,7 +8,7 @@ use glsl::syntax::ShaderStage;
 
 use glsl::syntax::{CompoundStatement, Expr, SingleDeclaration, Statement, TypeSpecifierNonArray};
 use glsl::syntax::*;
-use glsl::visitor::{Host, Visit, Visitor};
+use glsl::visitor::{HostMut, Visit, VisitorMut};
 
 use regex::Regex;
 
@@ -155,7 +155,7 @@ impl Counter {
 		self.identifiers_crushed.crush( self.identifiers_uncrushed.keys().to_vec(), &self.blacklist );
 	}
 }
-impl Visitor for Counter {
+impl VisitorMut for Counter {
 	/*
 	fn visit_translation_unit(&mut self, tu: &mut TranslationUnit) -> Visit {
 		println!("{:?}", tu );
@@ -475,12 +475,12 @@ impl ShaderCrusher {
 		for n in &self.blacklist {
 			counter.blacklist_identifier( n );
 		};
-		stage.visit(&mut counter);
+		stage.visit_mut(&mut counter);
 		counter.crush_names();
 		// :TODO: fixup crushed identifiers names
 		// skip crushing for now
 		counter.phase = CounterPhase::Crushing;
-		stage.visit(&mut counter);
+		stage.visit_mut(&mut counter);
 		println!("Stats:\n-------");
 		println!("Crushed Varnames: {:?}", counter.identifiers_crushed );
 		println!("Uncrushed Varnames: {:?}", counter.identifiers_uncrushed );
