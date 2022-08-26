@@ -39,7 +39,7 @@ pub fn main() {
 					)
 					.get_matches();
 
-	if let ("crush", Some( sub_matches ) ) = matches.subcommand() {
+	if let Some(("crush", sub_matches )) = matches.subcommand() {
 		let input = sub_matches.value_of("input").unwrap_or("input.glsl").to_string();
 		let output = sub_matches.value_of("output").unwrap_or("").to_string();
 
