@@ -33,10 +33,10 @@ fn main() {
     	impl GlslKeywords {
         	pub fn get() -> std::vec::Vec<String> {
         		let mut r = Vec::new();
-        		r.push(\"main\".to_string());	// technically not a keyword according to the spec, but we get in trouble if we 'fix' it, so blacklist it here
+        		r.push(\"main\".to_string());	// technically not a keyword according to the spec, but we get in trouble if we 'fix' it, so blocklist it here
     \n").unwrap();
 
-    // blacklist all swizzles, accroding to the glsl spec mixing components from different sets is not legal
+    // blocklist all swizzles, accroding to the glsl spec mixing components from different sets is not legal
     // :TODO: would be better if we could recognize a swizzle during parsing
     for e in all_combinations( b"xywz", 4 ) {
     	f.write_fmt( format_args!("\t\t\t\tr.push(\"{}\".to_string());\n", e )).unwrap();

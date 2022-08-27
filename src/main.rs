@@ -25,10 +25,10 @@ pub fn main() {
 							.help("Set the output filename")
 							.takes_value(true)
 						)
-						.arg(Arg::with_name("blacklist")
-							.long("blacklist")
-							.value_name("BLACKLIST")
-							.help("Add identifiers to blacklist")
+						.arg(Arg::with_name("blocklist")
+							.long("blocklist")
+							.value_name("BLOCKLIST")
+							.help("Add identifiers to blocklist")
 							.takes_value(true)
 						)						
 						.arg(Arg::with_name("dump-input")
@@ -52,11 +52,11 @@ pub fn main() {
 		};
 
 		let mut sc = ShaderCrusher::new();
-		match sub_matches.value_of( "blacklist" ){
+		match sub_matches.value_of( "blocklist" ){
 			None => {},
 			Some( bl ) => {
 				for n in bl.split(",") {
-					sc.blacklist_identifier( &n );
+					sc.blocklist_identifier( &n );
 				}
 			},
 		};

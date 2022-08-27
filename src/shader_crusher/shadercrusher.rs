@@ -63,7 +63,7 @@ impl IdentMap{
 //			self.entries.iter().map( |k, v| k )
 //		self.entries.keys().map( |e| e.clone() ).to_vec()
 	}
-	fn crush(&mut self, used_identifiers: Vec<String>, blacklist: &Vec<String> ) {
+	fn crush(&mut self, used_identifiers: Vec<String>, blocklist: &Vec<String> ) {
 		let mut candidates = Vec::new();
 		// :TODO: be smarter ;)
 		// :TODO: e.g. count frequency of characters in input and use most used ones
@@ -82,7 +82,7 @@ impl IdentMap{
 		// filter out used identifiers to avoid unwanted aliasing
 		let mut candidates = candidates.into_iter().filter(
 			|n|
-			!used_identifiers.contains( &n ) && !blacklist.contains( &n )
+			!used_identifiers.contains( &n ) && !blocklist.contains( &n )
 		).collect::<Vec<String>>();
 
 //		println!("Used identifiers {:?}", used_identifiers );
@@ -134,7 +134,7 @@ enum CounterPhase {
 
 struct Counter {
 	phase: CounterPhase,
-	blacklist: Vec<String>,
+	blocklist: Vec<String>,
 	crushing: bool,
 	identifiers_crushed: IdentMap,
 	identifiers_uncrushed: IdentMap,
@@ -144,7 +144,7 @@ impl Counter {
 	pub fn new() -> Counter {
 		Counter {
 			phase: CounterPhase::Analysing,
-			blacklist: vec![ "main".to_string() ],
+			blocklist: vec![ "main".to_string() ],
 			crushing: true,
 			identifiers_crushed: IdentMap::new(),
 			identifiers_uncrushed: IdentMap::new(),
@@ -152,7 +152,7 @@ impl Counter {
 	}
 
 	pub fn crush_names( &mut self ) {
-		self.identifiers_crushed.crush( self.identifiers_uncrushed.keys().to_vec(), &self.blacklist );
+		self.identifiers_crushed.crush( self.identifiers_uncrushed.keys().to_vec(), &self.blocklist );
 	}
 }
 impl VisitorMut for Counter {
@@ -377,15 +377,15 @@ impl VisitorMut for Counter {
 
 impl Counter {
 	fn add_identifier( &mut self, n: &str ) {
-		let blacklisted = self.blacklist.contains( &n.to_string() );
+		let blocklisted = self.blocklist.contains( &n.to_string() );
 		let uncrushed = self.identifiers_uncrushed.contains( &n.to_string() );
-		if self.crushing && !blacklisted && !uncrushed {
+		if self.crushing && !blocklisted && !uncrushed {
 			let c = self.identifiers_crushed.add( &n );
 			println!("{: >8} x {: <20} [-crushed-] {} {} {}",
 				c,
 				&n,
 				if self.crushing { "[--CRUSHING--]" } else { "[NOT CRUSHING]" },
-				if blacklisted { "[--BLACKLISTED--]" } else { "[NOT BLACKLISTED]" },
+				if blocklisted { "[--BLOCKLISTED--]" } else { "[NOT BLOCKLISTED]" },
 				if uncrushed { "[--UNCRUSHED--]" } else { "[NOT UNCRUSHED]" },
 			);
 		} else {
@@ -394,14 +394,14 @@ impl Counter {
 				c,
 				&n,
 				if self.crushing { "[--CRUSHING--]" } else { "[NOT CRUSHING]" },
-				if blacklisted { "[--BLACKLISTED--]" } else { "[NOT BLACKLISTED]" },
+				if blocklisted { "[--BLOCKLISTED--]" } else { "[NOT BLOCKLISTED]" },
 				if uncrushed { "[--UNCRUSHED--]" } else { "[NOT UNCRUSHED]" },
 			);
 		}
 	}
-	fn blacklist_identifier( &mut self, n: &str ) {
-		if !self.blacklist.contains( &n.to_string() ) {
-			self.blacklist.push( n.to_string() );
+	fn blocklist_identifier( &mut self, n: &str ) {
+		if !self.blocklist.contains( &n.to_string() ) {
+			self.blocklist.push( n.to_string() );
 		}
 	}
 }
@@ -411,23 +411,23 @@ pub struct ShaderCrusher {
 	output: String,
 	input_entropy: f32,
 	output_entropy: f32,
-	blacklist: Vec<String>,
+	blocklist: Vec<String>,
 }
 
 impl ShaderCrusher {
 	pub fn new() -> ShaderCrusher {
-		let blacklist = GlslKeywords::get();
+		let blocklist = GlslKeywords::get();
 		ShaderCrusher {
 			input: String::new(),
 			output: String::new(),
 			input_entropy: 0.0,
 			output_entropy: 0.0,
-			blacklist: blacklist,
+			blocklist: blocklist,
 		}
 	}
-	pub fn blacklist_identifier( &mut self, n: &str ) {
-		if !self.blacklist.contains( &n.to_string() ) {
-			self.blacklist.push( n.to_string() );
+	pub fn blocklist_identifier( &mut self, n: &str ) {
+		if !self.blocklist.contains( &n.to_string() ) {
+			self.blocklist.push( n.to_string() );
 		}
 	}
 
@@ -471,9 +471,9 @@ impl ShaderCrusher {
 
 //		let mut compound = stage.clone();
 		let mut counter = Counter::new();
-//		println!("Blacklist {:?}", self.blacklist );
-		for n in &self.blacklist {
-			counter.blacklist_identifier( n );
+//		println!("Blaocklist {:?}", self.blocklist );
+		for n in &self.blocklist {
+			counter.blocklist_identifier( n );
 		};
 		stage.visit_mut(&mut counter);
 		counter.crush_names();
