@@ -4,7 +4,6 @@ use std::ffi::CStr;
 use glsl::parser::Parse;
 use glsl::syntax::ShaderStage;
 use glsl::syntax::*;
-use glsl::syntax::{CompoundStatement, Expr, SingleDeclaration, Statement, TypeSpecifierNonArray};
 use glsl::visitor::{HostMut, Visit, VisitorMut};
 use libc::c_char;
 use regex::Regex;
@@ -55,7 +54,7 @@ impl IdentMap {
 	}
 	fn keys(&self) -> Vec<String> {
 		//		users.iter().map(|(_, user)| &user.reference.clone()).collect();
-		self.entries.iter().map(|(k, v)| k.into()).collect()
+		self.entries.iter().map(|(k, _v)| k.into()).collect()
 		//			self.entries.iter().map( |k, v| k )
 		//		self.entries.keys().map( |e| e.clone() ).to_vec()
 	}
@@ -189,7 +188,7 @@ impl VisitorMut for Counter {
 	fn visit_preprocessor_define(&mut self, pd: &mut PreprocessorDefine) -> Visit {
 		//		println!("Define: {:?} - {:?}", pd, self.crushing );
 		match pd {
-			PreprocessorDefine::ObjectLike { ident, value } => {
+			PreprocessorDefine::ObjectLike { ident, value: _ } => {
 				println!("{:?}", ident);
 				match ident {
 					Identifier(i) => {
@@ -205,10 +204,14 @@ impl VisitorMut for Counter {
 							},
 						}
 					},
-					_ => {},
+					// _ => {},
 				}
 			},
-			PreprocessorDefine::FunctionLike { ident, args, value } => {
+			PreprocessorDefine::FunctionLike {
+				ident,
+				args: _,
+				value: _,
+			} => {
 				println!("{:?}", ident);
 				match ident {
 					Identifier(i) => {
@@ -224,12 +227,14 @@ impl VisitorMut for Counter {
 							},
 						}
 					},
-					_ => {},
+					// _ => {},
 				}
 			},
+			/*
 			x => {
 				println!("{:?}", x);
 			},
+			*/
 		};
 		Visit::Children
 	}
@@ -273,7 +278,7 @@ impl VisitorMut for Counter {
 					},
 				}
 			},
-			_ => {},
+			// _ => {},
 		}
 		Visit::Children
 	}
@@ -299,7 +304,7 @@ impl VisitorMut for Counter {
 					},
 				}
 			},
-			_ => {},
+			// _ => {},
 		}
 		Visit::Children
 	}
@@ -468,7 +473,7 @@ impl ShaderCrusher {
 	}
 
 	pub fn crush(&mut self) {
-		let mut stage = ShaderStage::parse(&self.input);
+		let stage = ShaderStage::parse(&self.input);
 		//		println!("Stage: {:?}", stage);
 		let mut stage = match stage {
 			Err(e) => {
@@ -497,7 +502,7 @@ impl ShaderCrusher {
 		println!("Crushed Varnames: {:?}", counter.identifiers_crushed);
 		println!("Uncrushed Varnames: {:?}", counter.identifiers_uncrushed);
 		let mut glsl_buffer = String::new();
-		let r = glsl::transpiler::glsl::show_translation_unit(&mut glsl_buffer, &stage);
+		let _r = glsl::transpiler::glsl::show_translation_unit(&mut glsl_buffer, &stage);
 		//        println!("r {:?}", r);
 		//        println!("r {}", r);
 		//        let pr: PrettyPrint = From::from(stage);// as &PrettyPrint;
@@ -506,7 +511,7 @@ impl ShaderCrusher {
 
 		// cleanup empty pragmas
 		let re = Regex::new(r"(?m)^\s*#\s*pragma\s*$").unwrap();
-		let glsl_buffer = re.replace_all(&glsl_buffer, |c: &regex::Captures| {
+		let glsl_buffer = re.replace_all(&glsl_buffer, |_c: &regex::Captures| {
 			//				println!("{:?}", c );
 			"".to_string()
 		});
@@ -620,7 +625,7 @@ pub extern "C" fn shadercrusher_get_ouput(ptr: *mut ShaderCrusher) -> *mut c_cha
 }
 
 #[no_mangle]
-pub extern "C" fn shadercrusher_free_ouput(ptr: *mut ShaderCrusher, output_cs: *mut c_char) {
+pub extern "C" fn shadercrusher_free_ouput(_ptr: *mut ShaderCrusher, output_cs: *mut c_char) {
 	unsafe {
 		if output_cs.is_null() {
 			return;
