@@ -1,3 +1,3 @@
 mod shadercrusher;
 
-pub use shadercrusher::ShaderCrusher as ShaderCrusher;
+pub use shadercrusher::ShaderCrusher;
