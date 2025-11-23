@@ -115,7 +115,7 @@ impl IdentMap {
 		self.entries.get(n).map(|a| a.crushed_name.clone())
 	}
 	fn add(&mut self, n: &str) -> u32 {
-		let mut e = self
+		let e = self
 			.entries
 			.entry(n.to_string())
 			.or_insert_with(|| IdentEntry::new(&n));
@@ -586,7 +586,7 @@ pub extern "C" fn shadercrusher_free(ptr: *mut ShaderCrusher) {
 		return;
 	}
 	unsafe {
-		Box::from_raw(ptr);
+		drop(Box::from_raw(ptr));
 	}
 }
 
@@ -630,8 +630,8 @@ pub extern "C" fn shadercrusher_free_ouput(_ptr: *mut ShaderCrusher, output_cs: 
 		if output_cs.is_null() {
 			return;
 		}
-		std::ffi::CString::from_raw(output_cs)
-	};
+		drop(std::ffi::CString::from_raw(output_cs));
+	}
 }
 
 #[no_mangle]
