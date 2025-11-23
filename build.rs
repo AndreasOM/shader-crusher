@@ -5,19 +5,24 @@ use std::path::Path;
 
 fn all_combinations(input: &[u8; 4], l: u8) -> Vec<String> {
 	let mut r = Vec::new();
-	if l <= 0 {
-	} else if l == 1 {
-		for i in input {
-			r.push(format!("{}", *i as char).to_string());
-		}
-	} else {
-		let s = all_combinations(&input, l - 1);
-		for e in s {
-			r.push(e.clone()); // :HACK: not true
+	match l {
+		0 => {
+			// Return empty vec - just in case
+		},
+		1 => {
 			for i in input {
-				r.push(format!("{}{}", e, *i as char).to_string());
+				r.push(format!("{}", *i as char).to_string());
 			}
-		}
+		},
+		_ => {
+			let s = all_combinations(input, l - 1);
+			for e in s {
+				r.push(e.clone()); // :HACK: not true (includes all shorter combinations)
+				for i in input {
+					r.push(format!("{}{}", e, *i as char).to_string());
+				}
+			}
+		},
 	}
 	r
 }
@@ -32,33 +37,33 @@ fn main() {
 
     	impl GlslKeywords {
         	pub fn get() -> std::vec::Vec<String> {
-        		let mut r = Vec::new();
-        		r.push(\"main\".to_string());	// technically not a keyword according to the spec, but we get in trouble if we 'fix' it, so blocklist it here
+        		vec![
+        			String::from(\"main\"),	// technically not a keyword according to the spec, but we get in trouble if we 'fix' it, so blocklist it here
     \n").unwrap();
 
 	// blocklist all swizzles, accroding to the glsl spec mixing components from different sets is not legal
 	// :TODO: would be better if we could recognize a swizzle during parsing
 	for e in all_combinations(b"xywz", 4) {
-		f.write_fmt(format_args!("\t\t\t\tr.push(\"{}\".to_string());\n", e))
+		f.write_fmt(format_args!("\t\t\t\tString::from(\"{}\"),\n", e))
 			.unwrap();
 	}
 	for e in all_combinations(b"rgba", 4) {
-		f.write_fmt(format_args!("\t\t\t\tr.push(\"{}\".to_string());\n", e))
+		f.write_fmt(format_args!("\t\t\t\tString::from(\"{}\"),\n", e))
 			.unwrap();
 	}
 	for e in all_combinations(b"stpq", 4) {
-		f.write_fmt(format_args!("\t\t\t\tr.push(\"{}\".to_string());\n", e))
+		f.write_fmt(format_args!("\t\t\t\tString::from(\"{}\"),\n", e))
 			.unwrap();
 	}
 
 	let ks = include_str!("src/glsl_keywords.txt");
 	for k in ks.split_whitespace() {
-		f.write_fmt(format_args!("\t\t\t\tr.push(\"{}\".to_string());\n", k))
+		f.write_fmt(format_args!("\t\t\t\tString::from(\"{}\"),\n", k))
 			.unwrap();
 	}
 	f.write_all(
 		b"
-    			r
+    			]
         	}
     	}
     ",

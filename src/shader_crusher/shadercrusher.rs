@@ -54,11 +54,11 @@ impl IdentMap {
 	}
 	fn keys(&self) -> Vec<String> {
 		//		users.iter().map(|(_, user)| &user.reference.clone()).collect();
-		self.entries.iter().map(|(k, _v)| k.into()).collect()
+		self.entries.keys().map(|k| k.into()).collect()
 		//			self.entries.iter().map( |k, v| k )
 		//		self.entries.keys().map( |e| e.clone() ).to_vec()
 	}
-	fn crush(&mut self, used_identifiers: Vec<String>, blocklist: &Vec<String>) {
+	fn crush(&mut self, used_identifiers: Vec<String>, blocklist: &[String]) {
 		let mut candidates = Vec::new();
 		// :TODO: be smarter ;)
 		// :TODO: e.g. count frequency of characters in input and use most used ones
@@ -77,7 +77,7 @@ impl IdentMap {
 		// filter out used identifiers to avoid unwanted aliasing
 		let mut candidates = candidates
 			.into_iter()
-			.filter(|n| !used_identifiers.contains(&n) && !blocklist.contains(&n))
+			.filter(|n| !used_identifiers.contains(n) && !blocklist.contains(n))
 			.collect::<Vec<String>>();
 
 		//		println!("Used identifiers {:?}", used_identifiers );
@@ -118,7 +118,7 @@ impl IdentMap {
 		let e = self
 			.entries
 			.entry(n.to_string())
-			.or_insert_with(|| IdentEntry::new(&n));
+			.or_insert_with(|| IdentEntry::new(n));
 		e.count += 1;
 		e.count
 	}
@@ -199,7 +199,7 @@ impl VisitorMut for Counter {
 								let c = self.crushing;
 								self.crushing = false;
 								// :HACK: always add #define identifiers as uncrushed, so we don't have to parse all potential usages
-								self.add_identifier(&i);
+								self.add_identifier(i);
 								self.crushing = c;
 							},
 						}
@@ -222,7 +222,7 @@ impl VisitorMut for Counter {
 								let c = self.crushing;
 								self.crushing = false;
 								// :HACK: always add #define identifiers as uncrushed, so we don't have to parse all potential usages
-								self.add_identifier(&i);
+								self.add_identifier(i);
 								self.crushing = c;
 							},
 						}
@@ -274,7 +274,7 @@ impl VisitorMut for Counter {
 						}
 					},
 					CounterPhase::Analysing => {
-						self.add_identifier(&i);
+						self.add_identifier(i);
 					},
 				}
 			},
@@ -300,7 +300,7 @@ impl VisitorMut for Counter {
 						}
 					},
 					CounterPhase::Analysing => {
-						self.add_identifier(&i);
+						self.add_identifier(i);
 					},
 				}
 			},
@@ -368,10 +368,10 @@ impl VisitorMut for Counter {
 
 impl Counter {
 	fn add_identifier(&mut self, n: &str) {
-		let blocklisted = self.blocklist.contains(&n.to_string());
-		let uncrushed = self.identifiers_uncrushed.contains(&n.to_string());
+		let blocklisted = self.blocklist.iter().any(|s| s == n);
+		let uncrushed = self.identifiers_uncrushed.contains(n);
 		if self.crushing && !blocklisted && !uncrushed {
-			let c = self.identifiers_crushed.add(&n);
+			let c = self.identifiers_crushed.add(n);
 			println!(
 				"{: >8} x {: <20} [-crushed-] {} {} {}",
 				c,
@@ -393,7 +393,7 @@ impl Counter {
 				},
 			);
 		} else {
-			let c = self.identifiers_uncrushed.add(&n);
+			let c = self.identifiers_uncrushed.add(n);
 			println!(
 				"{: >8} x {: <20} [uncrushed] {} {} {}",
 				c,
@@ -439,7 +439,7 @@ impl ShaderCrusher {
 			output:         String::new(),
 			input_entropy:  0.0,
 			output_entropy: 0.0,
-			blocklist:      blocklist,
+			blocklist,
 		}
 	}
 	pub fn blocklist_identifier(&mut self, n: &str) {
@@ -502,7 +502,7 @@ impl ShaderCrusher {
 		println!("Crushed Varnames: {:?}", counter.identifiers_crushed);
 		println!("Uncrushed Varnames: {:?}", counter.identifiers_uncrushed);
 		let mut glsl_buffer = String::new();
-		let _r = glsl::transpiler::glsl::show_translation_unit(&mut glsl_buffer, &stage);
+		glsl::transpiler::glsl::show_translation_unit(&mut glsl_buffer, &stage);
 		//        println!("r {:?}", r);
 		//        println!("r {}", r);
 		//        let pr: PrettyPrint = From::from(stage);// as &PrettyPrint;
@@ -571,6 +571,12 @@ impl ShaderCrusher {
 		let ot = ol as f32 * oe;
 		println!("Input  Size: {}, Entropy: {} => {}", il, ie, it);
 		println!("Output Size: {}, Entropy: {} => {}", ol, oe, ot);
+	}
+}
+
+impl Default for ShaderCrusher {
+	fn default() -> Self {
+		Self::new()
 	}
 }
 

@@ -65,13 +65,13 @@ pub fn main() {
 			None => {},
 			Some(bl) => {
 				for n in bl.split(",") {
-					sc.blocklist_identifier(&n);
+					sc.blocklist_identifier(n);
 				}
 			},
 		};
 		sc.set_input(&data);
 		sc.crush();
-		if output.len() == 0 {
+		if output.is_empty() {
 			println!("Output:\n-----\n{}\n-----", sc.get_output());
 		} else {
 			fs::write(output, sc.get_output()).expect("// Unable to write file");
@@ -106,7 +106,7 @@ void main()
 	co = final_pos.xxyy;
 }
 ";
-		sc.set_input(&input);
+		sc.set_input(input);
 		println!("Input         : >\n{:?}\n<", input);
 		println!("Output        : >\n{:?}\n<", sc.get_output());
 		println!("---");
