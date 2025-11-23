@@ -46,7 +46,7 @@ or
 // code
 ```
 to keep certain identifiers untouched, e.g. uniforms that you need to resolve externaly.
-Keywords, built-in functions, and 'main' are automatically blacklisted.
+Keywords, built-in functions, and 'main' are automatically blocklisted.
 
 ## Embedded/Linked
 
@@ -72,7 +72,7 @@ shader_crusher::shadercrusher_free( pShaderCrusher );
 
 (because I want it)
 
- - Allow blacklist via c-api.
+ - Allow blocklist via c-api.
  - Add revalidation of output.
  - Run against piglet suite.
  - CI system with testing
@@ -89,8 +89,8 @@ shader_crusher::shadercrusher_free( pShaderCrusher );
 # Help
 
 - Run this against your shader, and see if it breaks anything, and what compression ratio you get.
-- Fix [#52](https://github.com/phaazon/glsl/issues/52) in the glsl crate (too many braces).
+- ~~Fix [#52](https://github.com/phaazon/glsl/issues/52) in the glsl crate (too many braces).~~
 - ~~Fix [#110](https://github.com/phaazon/glsl/issues/110) in the glsl crate (whitespace in defines).~~
-- The swizzling blacklist is totally wrong, but gets the job done for now.
+- The swizzling blocklist is totally wrong, but gets the job done for now.
 - '#define's could be fixed, but I was lazy.
 
