@@ -1,55 +1,56 @@
 use std::fs;
 
-use clap::{App, Arg, SubCommand};
+use clap::{Arg, ArgAction, Command};
 use shader_crusher::ShaderCrusher;
 
 pub fn main() {
-	let matches = App::new("shader-crusher")
+	let matches = Command::new("shader-crusher")
 		.version("0.1")
 		.author("Andreas N. <andreas@omni-mad.com>")
 		.about("Crushes glsl shaders.")
-		.subcommand(SubCommand::with_name("test"))
+		.subcommand(Command::new("test"))
 		.subcommand(
-			SubCommand::with_name("crush")
+			Command::new("crush")
 				.arg(
-					Arg::with_name("input")
+					Arg::new("input")
 						.long("input")
 						.value_name("INPUT")
-						.help("Set the input filename")
-						.takes_value(true),
+						.help("Set the input filename"),
 				)
 				.arg(
-					Arg::with_name("output")
+					Arg::new("output")
 						.long("output")
 						.value_name("OUTPUT")
-						.help("Set the output filename")
-						.takes_value(true),
+						.help("Set the output filename"),
 				)
 				.arg(
-					Arg::with_name("blocklist")
+					Arg::new("blocklist")
 						.long("blocklist")
 						.value_name("BLOCKLIST")
-						.help("Add identifiers to blocklist")
-						.takes_value(true),
+						.help("Add identifiers to blocklist"),
 				)
 				.arg(
-					Arg::with_name("dump-input")
+					Arg::new("dump-input")
 						.long("dump-input")
-						.value_name("DUMP_INPUT")
-						.takes_value(false),
+						.action(ArgAction::Count),
 				),
 		)
 		.get_matches();
 
 	if let Some(("crush", sub_matches)) = matches.subcommand() {
 		let input = sub_matches
-			.value_of("input")
+			.get_one::<String>("input")
+			.map(|s| s.as_str())
 			.unwrap_or("input.glsl")
 			.to_string();
-		let output = sub_matches.value_of("output").unwrap_or("").to_string();
+		let output = sub_matches
+			.get_one::<String>("output")
+			.map(|s| s.as_str())
+			.unwrap_or("")
+			.to_string();
 
 		let data = fs::read_to_string(input).expect("// Unable to read file");
-		match sub_matches.occurrences_of("dump-input") {
+		match sub_matches.get_count("dump-input") {
 			0 => {},
 			_ => {
 				println!("{}", data);
@@ -57,7 +58,10 @@ pub fn main() {
 		};
 
 		let mut sc = ShaderCrusher::new();
-		match sub_matches.value_of("blocklist") {
+		match sub_matches
+			.get_one::<String>("blocklist")
+			.map(|s| s.as_str())
+		{
 			None => {},
 			Some(bl) => {
 				for n in bl.split(",") {

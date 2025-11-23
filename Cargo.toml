@@ -23,7 +23,7 @@ path="src/main.rs"
 # crate-type = ["rlib", "staticlib", "dylib"]
 
 [dependencies]
-clap = { version= "3.2.17" }
+clap = { version= "4.5" }
 entropy = { version="0.4.1" }
 glsl = { version="6.0.1" }
 libc = { version="0.2.132" }
