@@ -25,7 +25,7 @@ path="src/main.rs"
 [dependencies]
 clap = { version= "4.5" }
 entropy = { version="0.4.1" }
-glsl = { version="6.0.1" }
+glsl = { version="7.0" }
 libc = { version="0.2.132" }
 regex = { version="1.6.0" }
 
