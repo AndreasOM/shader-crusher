@@ -1,6 +1,6 @@
 [package]
 name = "shader-crusher"
-version = "0.4.2-alpha"
+version = "0.5.0-dev"
 authors = ["Andreas Neukoetter <andreas@omni-mad.com>"]
 edition = "2021"
 
