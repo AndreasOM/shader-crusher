@@ -367,8 +367,14 @@ impl VisitorMut for Counter {
 }
 
 impl Counter {
+	/// Identifiers reserved by the GLSL spec: anything starting with `gl_`
+	/// (built-in variables, constants, functions) and anything containing `__`.
+	/// They are never renamed, independent of the blocklist.
+	fn is_reserved(n: &str) -> bool {
+		n.starts_with("gl_") || n.contains("__")
+	}
 	fn add_identifier(&mut self, n: &str) {
-		let blocklisted = self.blocklist.iter().any(|s| s == n);
+		let blocklisted = Self::is_reserved(n) || self.blocklist.iter().any(|s| s == n);
 		let uncrushed = self.identifiers_uncrushed.contains(n);
 		if self.crushing && !blocklisted && !uncrushed {
 			let c = self.identifiers_crushed.add(n);
@@ -647,4 +653,35 @@ pub extern "C" fn shadercrusher_crush(ptr: *mut ShaderCrusher) {
 		&mut *ptr
 	};
 	shadercrusher.crush();
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	fn crush(src: &str) -> String {
+		let mut sc = ShaderCrusher::new();
+		sc.set_input(src);
+		sc.crush();
+		sc.get_output()
+	}
+
+	#[test]
+	fn gl_prefixed_identifiers_are_never_renamed() {
+		let out = crush(
+			"#version 110\nuniform vec4 color_tint;\nvoid main() { gl_FragColor = gl_Color * color_tint; }\n",
+		);
+		assert!(out.contains("gl_FragColor"), "{out}");
+		assert!(out.contains("gl_Color"), "{out}");
+		assert!(
+			!out.contains("color_tint"),
+			"user identifiers must still be crushed: {out}"
+		);
+	}
+
+	#[test]
+	fn double_underscore_identifiers_are_never_renamed() {
+		let out = crush("#version 110\nuniform float my__value;\nvoid main() { gl_FragColor = vec4(my__value); }\n");
+		assert!(out.contains("my__value"), "{out}");
+	}
 }

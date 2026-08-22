@@ -47,7 +47,7 @@ piglit-fetch ref="main":
 #	ROUNDTRIP_FAIL crushed output does not re-parse through the crusher
 #	CRASH		   crusher exited non-zero
 #	VALIDATE_FAIL  $GLSL_VALIDATOR (e.g. glslangValidator) rejected an OK output
-# Exit is non-zero if any status in $PIGLIT_FATAL occurs (default: "CRASH ROUNDTRIP_FAIL").
+# Exit is non-zero if any status in $PIGLIT_FATAL occurs (default: "CRASH ROUNDTRIP_FAIL GL_RENAMED").
 [doc("Run every `expect_result: pass` piglit shader through the crusher; report + gate (see comments)")]
 piglit pattern="*":
 	#!/usr/bin/env sh
@@ -61,7 +61,7 @@ piglit pattern="*":
 	mkdir -p "$results/out" "$results/log"
 	report="$results/report.tsv"
 	: > "$report"
-	fatal="${PIGLIT_FATAL:-CRASH ROUNDTRIP_FAIL}"
+	fatal="${PIGLIT_FATAL:-CRASH ROUNDTRIP_FAIL GL_RENAMED}"
 	validator="${GLSL_VALIDATOR:-}"
 	tmp="$results/roundtrip.glsl"
 	selected=0

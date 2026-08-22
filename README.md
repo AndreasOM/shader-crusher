@@ -46,7 +46,7 @@ or
 // code
 ```
 to keep certain identifiers untouched, e.g. uniforms that you need to resolve externaly.
-Keywords, built-in functions, and 'main' are automatically blocklisted.
+Keywords, built-in functions, 'main', and reserved identifiers (`gl_*`, anything containing `__`) are automatically blocklisted.
 
 ## Piglit corpus
 
@@ -59,7 +59,7 @@ just piglit 'loop-*'       # only files matching a glob
 just piglit-clean
 ```
 
-Each shader ends up as one of `OK`, `GL_RENAMED` (a `gl_*` builtin got renamed), `PARSE_FAIL`, `ROUNDTRIP_FAIL` (output does not re-parse), `CRASH`, or `VALIDATE_FAIL` (only with `GLSL_VALIDATOR=glslangValidator` set). Details land in `piglit/results/report.tsv`; the recipe exits non-zero for the statuses in `PIGLIT_FATAL` (default `CRASH ROUNDTRIP_FAIL`).
+Each shader ends up as one of `OK`, `GL_RENAMED` (a `gl_*` builtin got renamed), `PARSE_FAIL`, `ROUNDTRIP_FAIL` (output does not re-parse), `CRASH`, or `VALIDATE_FAIL` (only with `GLSL_VALIDATOR=glslangValidator` set). Details land in `piglit/results/report.tsv`; the recipe exits non-zero for the statuses in `PIGLIT_FATAL` (default `CRASH ROUNDTRIP_FAIL GL_RENAMED`).
 
 ## Embedded/Linked
 

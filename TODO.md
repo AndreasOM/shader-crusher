@@ -16,6 +16,7 @@
 
 ## Unreleased
 [x] Add `just piglit` recipes to run piglit's glslparsertest corpus through the crusher
+[x] Never rename reserved identifiers (`gl_*`, `__`)
 
 ## Released
 
