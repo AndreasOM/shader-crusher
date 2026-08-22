@@ -429,6 +429,40 @@ impl Counter {
 	}
 }
 
+/// Remove `// ...` and single-line `/* ... */` comments from preprocessor
+/// directive lines (`#extension`, `#define`, `#pragma`, ...).
+///
+/// The glsl parser handles comments in code, but directive lines are lexed
+/// "till end of line": a trailing comment after `#extension` is a parse error,
+/// and a comment after `#define X 1` would be copied into the output verbatim.
+/// Non-directive lines are passed through untouched.
+fn strip_directive_comments(src: &str) -> String {
+	let mut out = String::with_capacity(src.len());
+	for line in src.lines() {
+		if line.trim_start().starts_with('#') {
+			let line = match line.find("//") {
+				Some(pos) => &line[..pos],
+				None => line,
+			};
+			let mut line = line.to_string();
+			while let Some(start) = line.find("/*") {
+				match line[start + 2..].find("*/") {
+					Some(len) => line.replace_range(start..start + 2 + len + 2, " "),
+					None => break, // block comment continues on the next line; leave it to the parser
+				}
+			}
+			out.push_str(line.trim_end());
+		} else {
+			out.push_str(line);
+		}
+		out.push('\n');
+	}
+	if !src.ends_with('\n') && !src.is_empty() {
+		out.pop();
+	}
+	out
+}
+
 pub struct ShaderCrusher {
 	input:          String,
 	output:         String,
@@ -479,7 +513,8 @@ impl ShaderCrusher {
 	}
 
 	pub fn crush(&mut self) {
-		let stage = ShaderStage::parse(&self.input);
+		let source = strip_directive_comments(&self.input);
+		let stage = ShaderStage::parse(&source);
 		//		println!("Stage: {:?}", stage);
 		let mut stage = match stage {
 			Err(e) => {
@@ -683,5 +718,35 @@ mod tests {
 	fn double_underscore_identifiers_are_never_renamed() {
 		let out = crush("#version 110\nuniform float my__value;\nvoid main() { gl_FragColor = vec4(my__value); }\n");
 		assert!(out.contains("my__value"), "{out}");
+	}
+
+	#[test]
+	fn strip_directive_comments_only_touches_directive_lines() {
+		let src = "#extension all : disable // no error\n  # define X 1 /* one */ // c\n#define Y /* a */ 2 /* b */\nfloat a = 1.0; // keep me\n/* keep */ float b;\n#pragma once";
+		let expected = "#extension all : disable\n  # define X 1\n#define Y   2\nfloat a = 1.0; // keep me\n/* keep */ float b;\n#pragma once";
+		assert_eq!(strip_directive_comments(src), expected);
+		assert_eq!(strip_directive_comments("#define A 1 // c\n"), "#define A 1\n");
+		assert_eq!(strip_directive_comments(""), "");
+	}
+
+	#[test]
+	fn comments_on_directive_lines_do_not_break_parsing_or_leak() {
+		let out = crush(
+			"#version 110\n#extension all : warn // no error\n#define SCALE 2.0 // twice\nuniform float some_value;\nvoid main() { gl_FragColor = vec4(some_value * SCALE); }\n",
+		);
+		assert!(out.contains("#extension all : warn\n"), "{out}");
+		assert!(out.contains("#define SCALE 2.0\n"), "{out}");
+		assert!(!out.contains("//"), "comment leaked: {out}");
+		assert!(!out.contains("some_value"), "shader was not crushed: {out}");
+	}
+
+	#[test]
+	fn pragma_with_trailing_comment_still_toggles_crushing() {
+		let out = crush(
+			"#version 110\n#pragma SHADER_CRUSHER_OFF // keep uniforms\nuniform float keep_me;\n#pragma SHADER_CRUSHER_ON // back on\nuniform float crush_me;\nvoid main() { gl_FragColor = vec4(keep_me + crush_me); }\n",
+		);
+		assert!(out.contains("keep_me"), "{out}");
+		assert!(!out.contains("crush_me"), "{out}");
+		assert!(!out.contains("#pragma"), "pragma should be removed: {out}");
 	}
 }
