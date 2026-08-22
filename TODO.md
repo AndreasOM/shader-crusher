@@ -15,6 +15,7 @@
 # DONE
 
 ## Unreleased
+[x] Add `just piglit` recipes to run piglit's glslparsertest corpus through the crusher
 
 ## Released
 

@@ -48,6 +48,19 @@ or
 to keep certain identifiers untouched, e.g. uniforms that you need to resolve externaly.
 Keywords, built-in functions, and 'main' are automatically blocklisted.
 
+## Piglit corpus
+
+[piglit](https://gitlab.freedesktop.org/mesa/piglit)'s `tests/glslparsertest` suite (~530 GLSL 1.10–1.30 shaders, each tagged `expect_result: pass|fail`) doubles as a regression corpus:
+
+```
+just piglit-fetch          # download tests/glslparsertest into ./piglit (gitignored)
+just piglit                # crush every `expect_result: pass` shader, report, gate
+just piglit 'loop-*'       # only files matching a glob
+just piglit-clean
+```
+
+Each shader ends up as one of `OK`, `GL_RENAMED` (a `gl_*` builtin got renamed), `PARSE_FAIL`, `ROUNDTRIP_FAIL` (output does not re-parse), `CRASH`, or `VALIDATE_FAIL` (only with `GLSL_VALIDATOR=glslangValidator` set). Details land in `piglit/results/report.tsv`; the recipe exits non-zero for the statuses in `PIGLIT_FATAL` (default `CRASH ROUNDTRIP_FAIL`).
+
 ## Embedded/Linked
 
 From C/C++
@@ -74,7 +87,6 @@ shader_crusher::shadercrusher_free( pShaderCrusher );
 
  - Allow blocklist via c-api.
  - Add revalidation of output.
- - Run against piglet suite.
  - CI system with testing
 
 # Future
