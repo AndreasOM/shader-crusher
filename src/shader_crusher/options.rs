@@ -4,9 +4,10 @@ pub enum Scoring {
 	/// Next unused name in frequency order.
 	Frequency,
 	/// Shader-Minifier style: maximise the frequency of the character
-	/// bigrams the new name forms with its neighbours.
+	/// bigrams the new name forms with its distinct neighbours.
 	Bigram,
 	/// Like `Bigram`, but each neighbour is weighted by how often it occurs.
+	/// Measured best after compression on intro-sized shaders; the default.
 	BigramCount,
 }
 
@@ -50,7 +51,7 @@ impl Default for Options {
 			rename:    true,
 			simplify:  true,
 			shadowing: true,
-			scoring:   Scoring::Bigram,
+			scoring:   Scoring::BigramCount,
 			selfcheck: true,
 		}
 	}

@@ -66,9 +66,9 @@ pub fn main() {
 					Arg::new("score")
 						.long("score")
 						.value_name("SCORING")
-						.value_parser(["bigram", "count", "freq"])
-						.default_value("bigram")
-						.help("How new names are chosen"),
+						.value_parser(["count", "bigram", "freq"])
+						.default_value("count")
+						.help("How new names are chosen: count = bigram contexts weighted by occurrence (best after compression), bigram = unweighted, freq = most frequent letter first"),
 				)
 				.arg(
 					Arg::new("dump-input")

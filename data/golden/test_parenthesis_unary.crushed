@@ -1,2 +1,2 @@
 #version 410
-void main(){float o=1.;float l=2.;bool t=true;float a=-o;float f=-o+l;float e=- -o;bool i=!t;float v=2.*-o;bool n=-o>-l;vec2 r=vec2(1.,2.);float b=-r.x;int c=0;int g=++c;int d=c++;gl_FragColor=vec4(a,f,v,1.);}
+void main(){float e=1.;float x=2.;bool r=true;float m=-e;float o=-e+x;float l=- -e;bool t=!r;float a=2.*-e;bool f=-e>-x;vec2 i=vec2(1.,2.);float n=-i.x;int v=0;int b=++v;int c=v++;gl_FragColor=vec4(m,o,a,1.);}

@@ -54,6 +54,7 @@ piglit-fetch ref="main":
 #	VALIDATE_FAIL  $GLSL_VALIDATOR (e.g. glslangValidator) rejected an OK output
 # Compressed sizes are what the tool optimises for; the "concatenated" line compresses all OK outputs as one
 # stream (closer to an intro's shader blob). Set PIGLIT_BASELINE=<old report.tsv> to diff against a previous run.
+# PIGLIT_ARGS="--score freq --no-shadowing" passes extra CLI flags to every crush.
 # Exit is non-zero if any status in $PIGLIT_FATAL occurs (default: "CRASH ROUNDTRIP_FAIL ROUNDTRIP_GROW GL_RENAMED SELFCHECK_FAIL").
 [doc("Run every `expect_result: pass` piglit shader through the crusher; report + gate (see comments)")]
 piglit pattern="*":
@@ -70,6 +71,7 @@ piglit pattern="*":
 	: > "$report"
 	fatal="${PIGLIT_FATAL:-CRASH ROUNDTRIP_FAIL ROUNDTRIP_GROW GL_RENAMED SELFCHECK_FAIL}"
 	validator="${GLSL_VALIDATOR:-}"
+	args="${PIGLIT_ARGS:-}"
 	tmp="$results/roundtrip.glsl"
 	allok="$results/all_ok.glsl"
 	: > "$allok"
@@ -89,7 +91,7 @@ piglit pattern="*":
 		log="$results/log/$name.log"
 		status=OK
 		set +e
-		"$bin" crush --input "$f" --output "$out" > "$log" 2>&1
+		"$bin" crush $args --input "$f" --output "$out" > "$log" 2>&1
 		rc=$?
 		set -e
 		case $rc in
@@ -101,7 +103,7 @@ piglit pattern="*":
 		esac
 		if [ "$status" = OK ]; then
 			set +e
-			"$bin" crush --input "$out" --output "$tmp" > "$log.roundtrip" 2>&1
+			"$bin" crush $args --input "$out" --output "$tmp" > "$log.roundtrip" 2>&1
 			rc=$?
 			set -e
 			if [ $rc -ne 0 ]; then

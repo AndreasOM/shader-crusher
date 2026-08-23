@@ -159,7 +159,10 @@ impl ShaderCrusher {
 
 		let mut table = scope::resolve(&mut stage, &protection)?;
 		if self.options.rename {
-			let text = printer::print(&stage);
+			// statistics text: pinned symbols as they will print, the rest as sentinels
+			let mut stats_tree = stage.clone();
+			rename::apply_pinned(&mut stats_tree, &table);
+			let text = printer::print(&stats_tree);
 			rename::assign(
 				&mut table,
 				&text,
@@ -635,7 +638,12 @@ mod tests {
 			.next()
 			.unwrap();
 		assert_eq!(out.matches(&format!("float {name}(")).count(), 3, "{out}");
-		assert_eq!(out.matches(&format!("{name}(")).count(), 5, "{out}");
+		assert_eq!(out.matches(&format!("{name}(1.)")).count(), 1, "{out}");
+		assert_eq!(
+			out.matches(&format!("{name}(vec2(1.))")).count(),
+			1,
+			"{out}"
+		);
 	}
 
 	#[test]

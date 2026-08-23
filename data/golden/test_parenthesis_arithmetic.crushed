@@ -1,2 +1,2 @@
 #version 410
-void main(){float o=1.;float l=2.;float a=3.;float f=4.;float t=o+l*a;float r=(o+l)*a;float v=o*l+a;float e=o/l-a;float g=o+l*a/f;float i=(o+l)*(a-f);float c=o*(l+a*f);gl_FragColor=vec4(t,r,v,1.);}
+void main(){float v=1.;float r=2.;float m=3.;float o=4.;float a=v+r*m;float l=(v+r)*m;float f=v*r+m;float t=v/r-m;float i=v+r*m/o;float e=(v+r)*(m-o);float g=v*(r+m*o);gl_FragColor=vec4(a,l,f,1.);}

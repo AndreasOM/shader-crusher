@@ -14,7 +14,7 @@
 use std::collections::{HashMap, HashSet};
 
 use super::builtins::{is_swizzle, never_generate};
-use super::scope::{sentinel_id, ScopeId, SymbolId, SymbolKind, SymbolTable};
+use super::scope::{sentinel, sentinel_id, ScopeId, SymbolId, SymbolKind, SymbolTable};
 use super::Scoring;
 use crate::glsl::syntax::*;
 use crate::glsl::visitor::{HostMut, Visit, VisitorMut};
@@ -36,6 +36,99 @@ fn letters_by_frequency(text: &str) -> Vec<char> {
 	letters
 }
 
+/// Counts of adjacent character pairs in the shader text. Symbols appear as
+/// their sentinel characters, so a symbol's left and right contexts are the
+/// neighbours of one distinct character.
+struct Bigrams {
+	next_of: HashMap<char, HashMap<char, u32>>,
+	prev_of: HashMap<char, HashMap<char, u32>>,
+}
+
+impl Bigrams {
+	fn new(text: &str) -> Self {
+		let mut b = Bigrams {
+			next_of: HashMap::new(),
+			prev_of: HashMap::new(),
+		};
+		for (x, y) in text.chars().zip(text.chars().skip(1)) {
+			b.add(x, y, 1);
+		}
+		b
+	}
+
+	fn add(&mut self, a: char, b: char, n: u32) {
+		*self.next_of.entry(a).or_default().entry(b).or_default() += n;
+		*self.prev_of.entry(b).or_default().entry(a).or_default() += n;
+	}
+
+	fn count(&self, a: char, b: char) -> u32 {
+		self.next_of
+			.get(&a)
+			.and_then(|m| m.get(&b))
+			.copied()
+			.unwrap_or(0)
+	}
+
+	/// How well `cand` fits the contexts of the symbol printed as `s`: the
+	/// frequency of the bigrams its first/last character would form with
+	/// each distinct neighbour (`weighted`: times how often that neighbour
+	/// occurs), minus a penalty that keeps any single letter ahead of any
+	/// longer name.
+	fn score(&self, s: char, cand: &str, weighted: bool) -> i64 {
+		let first = cand.chars().next().expect("non-empty name");
+		let last = cand.chars().next_back().expect("non-empty name");
+		let mut score = 0i64;
+		let mut occurrences = 0i64;
+		if let Some(prev) = self.prev_of.get(&s) {
+			for (&c, &w) in prev {
+				occurrences += w as i64;
+				let v = self.count(c, first) as i64;
+				score += if weighted { v * w as i64 } else { v };
+			}
+		}
+		if let Some(next) = self.next_of.get(&s) {
+			for (&c, &w) in next {
+				let v = self.count(last, c) as i64;
+				score += if weighted { v * w as i64 } else { v };
+			}
+		}
+		if cand.chars().count() > 1 {
+			let inner = self.count(first, last) as i64;
+			score += if weighted { inner * occurrences } else { inner };
+			score -= 1000 * if weighted { occurrences.max(1) } else { 1 };
+		}
+		score
+	}
+
+	/// Account for the symbol printed as `s` now being spelled `name`.
+	fn fold(&mut self, s: char, name: &str) {
+		let first = name.chars().next().expect("non-empty name");
+		let last = name.chars().next_back().expect("non-empty name");
+		let prev = self.prev_of.remove(&s).unwrap_or_default();
+		let next = self.next_of.remove(&s).unwrap_or_default();
+		let mut occurrences = 0;
+		for (c, w) in prev {
+			if let Some(m) = self.next_of.get_mut(&c) {
+				m.remove(&s);
+			}
+			self.add(c, first, w);
+			occurrences += w;
+		}
+		for (c, w) in next {
+			if let Some(m) = self.prev_of.get_mut(&c) {
+				m.remove(&s);
+			}
+			self.add(last, c, w);
+		}
+		if name.chars().count() > 1 {
+			self.add(first, last, occurrences);
+		}
+	}
+}
+
+/// Candidates examined per choice (the pool is in preference order).
+const CANDIDATES: usize = 26;
+
 struct Renamer<'a> {
 	table:       &'a mut SymbolTable,
 	letters:     Vec<char>,
@@ -43,6 +136,7 @@ struct Renamer<'a> {
 	scoring:     Scoring,
 	shadowing:   bool,
 	next_triple: usize,
+	bigrams:     Bigrams,
 }
 
 impl<'a> Renamer<'a> {
@@ -81,15 +175,29 @@ impl<'a> Renamer<'a> {
 		}
 	}
 
-	fn choose(&mut self, _sym: SymbolId, avail: &mut Vec<String>) -> String {
+	fn choose(&mut self, sym: SymbolId, avail: &mut Vec<String>) -> String {
 		if avail.is_empty() {
 			let n = self.triple();
 			avail.push(n);
 		}
-		match self.scoring {
-			// bigram scoring is added in a later step; frequency order for now
-			Scoring::Frequency | Scoring::Bigram | Scoring::BigramCount => avail.remove(0),
+		let weighted = match self.scoring {
+			Scoring::Frequency => return avail.remove(0),
+			Scoring::Bigram => false,
+			Scoring::BigramCount => true,
+		};
+		let s = sentinel(sym).chars().next().expect("sentinel");
+		let mut best = 0;
+		let mut best_score = i64::MIN;
+		for (i, cand) in avail.iter().take(CANDIDATES).enumerate() {
+			let score = self.bigrams.score(s, cand, weighted);
+			if score > best_score {
+				best_score = score;
+				best = i;
+			}
 		}
+		let name = avail.remove(best);
+		self.bigrams.fold(s, &name);
+		name
 	}
 
 	fn visit_scope(
@@ -189,6 +297,7 @@ pub fn assign(table: &mut SymbolTable, text: &str, scoring: Scoring, shadowing: 
 		scoring,
 		shadowing,
 		next_triple: 0,
+		bigrams: Bigrams::new(text),
 	};
 	let pool = r.initial_pool();
 	r.visit_scope(0, pool, Vec::new());
@@ -196,20 +305,27 @@ pub fn assign(table: &mut SymbolTable, text: &str, scoring: Scoring, shadowing: 
 }
 
 struct Apply<'a> {
-	table: &'a SymbolTable,
+	table:       &'a SymbolTable,
+	only_pinned: bool,
+}
+
+impl<'a> Apply<'a> {
+	fn name(&self, s: &mut String) {
+		if let Some(id) = sentinel_id(s) {
+			if !self.only_pinned || self.table.symbols[id as usize].pinned.is_some() {
+				*s = self.table.new_name_or_original(id).to_string();
+			}
+		}
+	}
 }
 
 impl<'a> VisitorMut for Apply<'a> {
 	fn visit_identifier(&mut self, i: &mut Identifier) -> Visit {
-		if let Some(id) = sentinel_id(&i.0) {
-			i.0 = self.table.new_name_or_original(id).to_string();
-		}
+		self.name(&mut i.0);
 		Visit::Children
 	}
 	fn visit_type_name(&mut self, t: &mut TypeName) -> Visit {
-		if let Some(id) = sentinel_id(&t.0) {
-			t.0 = self.table.new_name_or_original(id).to_string();
-		}
+		self.name(&mut t.0);
 		Visit::Children
 	}
 }
@@ -217,7 +333,19 @@ impl<'a> VisitorMut for Apply<'a> {
 /// Replace every sentinel by the symbol's new name (or its original name
 /// when it has none).
 pub fn apply(tu: &mut TranslationUnit, table: &SymbolTable) {
-	tu.visit_mut(&mut Apply { table });
+	tu.visit_mut(&mut Apply {
+		table,
+		only_pinned: false,
+	});
+}
+
+/// Replace only the sentinels of pinned symbols by their (unchanged) names,
+/// so the text used for statistics shows them as they will be printed.
+pub fn apply_pinned(tu: &mut TranslationUnit, table: &SymbolTable) {
+	tu.visit_mut(&mut Apply {
+		table,
+		only_pinned: true,
+	});
 }
 
 #[cfg(test)]
@@ -230,5 +358,28 @@ mod tests {
 		assert_eq!(&l[..3], &['z', 'y', 'x']);
 		assert_eq!(l[3], 'a');
 		assert_eq!(l.len(), 52);
+	}
+
+	#[test]
+	fn bigram_scoring_prefers_names_that_repeat_existing_contexts() {
+		let s = sentinel(0);
+		let text = format!("f(a)f(a) x({s})+{s}", s = s);
+		let sc = s.chars().next().unwrap();
+		let mut b = Bigrams::new(&text);
+		// `(a` and `a)` exist twice; `(b` / `b)` never
+		assert!(b.score(sc, "a", false) > b.score(sc, "b", false));
+		assert!(b.score(sc, "a", true) > b.score(sc, "b", true));
+		// any single letter beats any pair
+		assert!(b.score(sc, "q", false) > b.score(sc, "ab", false));
+		b.fold(sc, "a");
+		assert_eq!(b.count('(', 'a'), 3);
+		assert_eq!(b.count('a', ')'), 3);
+		assert_eq!(b.count('+', 'a'), 1);
+		assert!(b.prev_of.get(&sc).is_none() && b.next_of.get(&sc).is_none());
+		// a pair adds its inner bigram once per occurrence
+		let text = format!("x {s}, {s}", s = s);
+		let mut b = Bigrams::new(&text);
+		b.fold(sc, "ab");
+		assert_eq!(b.count('a', 'b'), 2);
 	}
 }
