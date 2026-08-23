@@ -1,16 +1,18 @@
 use std::fs;
+use std::io::Write;
 
 use clap::{Arg, ArgAction, Command};
-use shader_crusher::ShaderCrusher;
+use shader_crusher::{Options, Scoring, ShaderCrusher};
 
 pub fn main() {
 	let matches = Command::new("shader-crusher")
 		.version(env!("CARGO_PKG_VERSION"))
 		.author("Andreas N. <andreas@omni-mad.com>")
 		.about("Crushes glsl shaders.")
-		.subcommand(Command::new("test"))
+		.subcommand_required(true)
 		.subcommand(
 			Command::new("crush")
+				.about("Crush one shader file")
 				.arg(
 					Arg::new("input")
 						.long("input")
@@ -21,99 +23,120 @@ pub fn main() {
 					Arg::new("output")
 						.long("output")
 						.value_name("OUTPUT")
-						.help("Set the output filename"),
+						.help("Set the output filename (default: stdout)"),
 				)
 				.arg(
 					Arg::new("blocklist")
 						.long("blocklist")
 						.value_name("BLOCKLIST")
-						.help("Add identifiers to blocklist"),
+						.help("Comma separated identifiers that must not be renamed"),
+				)
+				.arg(
+					Arg::new("verbose")
+						.long("verbose")
+						.short('v')
+						.action(ArgAction::SetTrue)
+						.help("Per-identifier diagnostics on stderr"),
+				)
+				.arg(
+					Arg::new("no-rename")
+						.long("no-rename")
+						.action(ArgAction::SetTrue)
+						.help("Do not rename identifiers"),
+				)
+				.arg(
+					Arg::new("no-simplify")
+						.long("no-simplify")
+						.action(ArgAction::SetTrue)
+						.help("Do not apply AST-level rewrites"),
+				)
+				.arg(
+					Arg::new("no-shadowing")
+						.long("no-shadowing")
+						.action(ArgAction::SetTrue)
+						.help("Never let a local reuse the name of a global, function or type"),
+				)
+				.arg(
+					Arg::new("no-selfcheck")
+						.long("no-selfcheck")
+						.action(ArgAction::SetTrue)
+						.help("Skip re-parsing the output to verify it"),
+				)
+				.arg(
+					Arg::new("score")
+						.long("score")
+						.value_name("SCORING")
+						.value_parser(["bigram", "count", "freq"])
+						.default_value("bigram")
+						.help("How new names are chosen"),
 				)
 				.arg(
 					Arg::new("dump-input")
 						.long("dump-input")
-						.action(ArgAction::Count),
+						.action(ArgAction::SetTrue)
+						.help("Echo the input on stderr"),
 				),
 		)
 		.get_matches();
 
-	if let Some(("crush", sub_matches)) = matches.subcommand() {
-		let input = sub_matches
-			.get_one::<String>("input")
-			.map(|s| s.as_str())
-			.unwrap_or("input.glsl")
-			.to_string();
-		let output = sub_matches
-			.get_one::<String>("output")
-			.map(|s| s.as_str())
-			.unwrap_or("")
-			.to_string();
+	let Some(("crush", sub_matches)) = matches.subcommand() else {
+		unreachable!("subcommand required");
+	};
+	let input = sub_matches
+		.get_one::<String>("input")
+		.map(|s| s.as_str())
+		.unwrap_or("input.glsl")
+		.to_string();
+	let output = sub_matches
+		.get_one::<String>("output")
+		.map(|s| s.as_str())
+		.unwrap_or("")
+		.to_string();
 
-		let data = fs::read_to_string(input).expect("// Unable to read file");
-		match sub_matches.get_count("dump-input") {
-			0 => {},
-			_ => {
-				println!("{}", data);
-			},
-		};
-
-		let mut sc = ShaderCrusher::new();
-		match sub_matches
-			.get_one::<String>("blocklist")
-			.map(|s| s.as_str())
-		{
-			None => {},
-			Some(bl) => {
-				for n in bl.split(",") {
-					sc.blocklist_identifier(n);
-				}
-			},
-		};
-		sc.set_input(&data);
-		sc.crush();
-		if output.is_empty() {
-			println!("Output:\n-----\n{}\n-----", sc.get_output());
-		} else {
-			fs::write(output, sc.get_output()).expect("// Unable to write file");
-		}
-	} else {
-		// just default to testing
-
-		println!("ShaderCrusher - Testmode");
-		let mut sc = ShaderCrusher::new();
-		let input = r"
-#version 410
-
-#pragma
-
-#pragma SHADER_CRUSHER_OFF
-
-uniform float iTime;
-layout (location=0) out vec4 co;
-layout (location=0) in vec2 p;
-#pragma SHADER_CRUSHER_ON
-
-// totally useless function just for testing entropy
-vec2 do_something_one( vec2 p )
-{
-	return p;
-}
-
-void main()
-{
-	vec2 pos = do_something_one( p );
-	vec2 final_pos = do_something_one( pos );
-	co = final_pos.xxyy;
-}
-";
-		sc.set_input(input);
-		println!("Input         : >\n{:?}\n<", input);
-		println!("Output        : >\n{:?}\n<", sc.get_output());
-		println!("---");
-		sc.crush();
-		println!("---");
-		println!("Input         : >\n{:?}\n<", input);
-		println!("Crushed Output: >\n{:?}\n<", sc.get_output());
-		println!("Crushed Output: >\n{}\n<", sc.get_output());
+	let data = match fs::read_to_string(&input) {
+		Ok(d) => d,
+		Err(e) => {
+			eprintln!("error: cannot read {}: {}", input, e);
+			std::process::exit(1);
+		},
+	};
+	if sub_matches.get_flag("dump-input") {
+		eprintln!("{}", data);
 	}
+
+	let opts = Options {
+		blocklist: sub_matches
+			.get_one::<String>("blocklist")
+			.map(|bl| bl.split(',').map(|s| s.to_string()).collect())
+			.unwrap_or_default(),
+		verbose:   sub_matches.get_flag("verbose"),
+		rename:    !sub_matches.get_flag("no-rename"),
+		simplify:  !sub_matches.get_flag("no-simplify"),
+		shadowing: !sub_matches.get_flag("no-shadowing"),
+		selfcheck: !sub_matches.get_flag("no-selfcheck"),
+		scoring:   Scoring::parse(sub_matches.get_one::<String>("score").unwrap()).unwrap(),
+	};
+
+	let mut sc = ShaderCrusher::with_options(opts);
+	sc.set_input(&data);
+	let code = match sc.crush() {
+		Ok(()) => {
+			eprintln!("{}: {}", input, sc.stats());
+			0
+		},
+		Err(e) => {
+			eprintln!("error: {}: {}", input, e);
+			eprintln!("error: output is the unchanged input");
+			e.exit_code()
+		},
+	};
+	if output.is_empty() {
+		let mut stdout = std::io::stdout().lock();
+		let _ = stdout.write_all(sc.get_output().as_bytes());
+		let _ = stdout.flush();
+	} else if let Err(e) = fs::write(&output, sc.get_output()) {
+		eprintln!("error: cannot write {}: {}", output, e);
+		std::process::exit(1);
+	}
+	std::process::exit(code);
 }
