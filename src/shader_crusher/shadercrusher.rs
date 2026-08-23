@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 use std::ffi::CStr;
 
-use glsl::parser::Parse;
-use glsl::syntax::ShaderStage;
-use glsl::syntax::*;
-use glsl::visitor::{HostMut, Visit, VisitorMut};
 use libc::c_char;
 use regex::Regex;
+
+use crate::glsl::parser::Parse;
+use crate::glsl::syntax::ShaderStage;
+use crate::glsl::syntax::*;
+use crate::glsl::visitor::{HostMut, Visit, VisitorMut};
 
 include!(concat!(env!("OUT_DIR"), "/glsl_keywords.rs"));
 
@@ -484,9 +485,9 @@ impl ShaderCrusher {
 	pub fn new() -> ShaderCrusher {
 		let blocklist = GlslKeywords::get();
 		ShaderCrusher {
-			input:          String::new(),
-			output:         String::new(),
-			input_entropy:  0.0,
+			input: String::new(),
+			output: String::new(),
+			input_entropy: 0.0,
 			output_entropy: 0.0,
 			blocklist,
 		}
@@ -552,7 +553,7 @@ impl ShaderCrusher {
 		println!("Crushed Varnames: {:?}", counter.identifiers_crushed);
 		println!("Uncrushed Varnames: {:?}", counter.identifiers_uncrushed);
 		let mut glsl_buffer = String::new();
-		glsl::transpiler::glsl::show_translation_unit(&mut glsl_buffer, &stage);
+		crate::glsl::transpiler::glsl::show_translation_unit(&mut glsl_buffer, &stage);
 		//        println!("r {:?}", r);
 		//        println!("r {}", r);
 		//        let pr: PrettyPrint = From::from(stage);// as &PrettyPrint;
@@ -734,7 +735,10 @@ mod tests {
 		let src = "#extension all : disable // no error\n  # define X 1 /* one */ // c\n#define Y /* a */ 2 /* b */\nfloat a = 1.0; // keep me\n/* keep */ float b;\n#pragma once";
 		let expected = "#extension all : disable\n  # define X 1\n#define Y   2\nfloat a = 1.0; // keep me\n/* keep */ float b;\n#pragma once";
 		assert_eq!(strip_directive_comments(src), expected);
-		assert_eq!(strip_directive_comments("#define A 1 // c\n"), "#define A 1\n");
+		assert_eq!(
+			strip_directive_comments("#define A 1 // c\n"),
+			"#define A 1\n"
+		);
 		assert_eq!(strip_directive_comments(""), "");
 	}
 

@@ -101,15 +101,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d68716e45ef572f351be6fad93a7bbf35242b4289a2ff75434032e5d73d74cc2"
 
 [[package]]
-name = "glsl"
-version = "7.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "577ac945ce66a4b7004c6e2807f517f94ef027dda89df578abe1fbb979d22f49"
-dependencies = [
- "nom",
-]
-
-[[package]]
 name = "is_terminal_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -180,12 +171,12 @@ checksum = "7a2d987857b319362043e95f5353c0535c1f58eec5336fdfcf626430af7def58"
 
 [[package]]
 name = "shader-crusher"
-version = "0.6.1-dev"
+version = "0.7.0-dev"
 dependencies = [
  "clap",
  "entropy",
- "glsl",
  "libc",
+ "nom",
  "regex",
 ]
 

@@ -1,11 +1,12 @@
 [package]
 name = "shader-crusher"
-version = "0.6.1-dev"
+version = "0.7.0-dev"
 authors = ["Andreas Neukoetter <andreas@omni-mad.com>"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-license = "MIT"
+# src/glsl/ is a vendored copy of the BSD-3-Clause `glsl` crate (see LICENSE-glsl).
+license = "MIT AND BSD-3-Clause"
 description = "A little helper to optimize glsl shaders for size."
 readme = "README.md"
 homepage = "https://github.com/AndreasOM/shader-crusher"
@@ -25,11 +26,8 @@ path="src/main.rs"
 [dependencies]
 clap = { version= "4.5" }
 entropy = { version="0.4.1" }
-glsl = { version="7.0" }
 libc = { version="0.2.132" }
+nom = { version="7", default-features=false, features=["std"] }
 regex = { version="1.6.0" }
 
 [build-dependencies]
-
-[replace]
-#"glsl:4.0.0" = { path = 'vendor/glsl' }
