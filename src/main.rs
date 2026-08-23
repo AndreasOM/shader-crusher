@@ -5,7 +5,7 @@ use shader_crusher::ShaderCrusher;
 
 pub fn main() {
 	let matches = Command::new("shader-crusher")
-		.version("0.1")
+		.version(env!("CARGO_PKG_VERSION"))
 		.author("Andreas N. <andreas@omni-mad.com>")
 		.about("Crushes glsl shaders.")
 		.subcommand(Command::new("test"))
