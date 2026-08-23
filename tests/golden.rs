@@ -35,7 +35,8 @@ fn golden_files() {
 			fs::write(&expected_path, &out).expect("write golden");
 			continue;
 		}
-		match fs::read_to_string(&expected_path) {
+		// the crusher always emits LF; tolerate a CRLF checkout of the expectation
+		match fs::read_to_string(&expected_path).map(|s| s.replace("\r\n", "\n")) {
 			Ok(expected) if expected == out => {},
 			Ok(expected) => failures.push(format!(
 				"{name}: output differs from {} (UPDATE_GOLDEN=1 cargo test to accept)\n--- expected\n{expected}\n--- got\n{out}\n",

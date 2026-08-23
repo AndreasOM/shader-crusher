@@ -13,6 +13,7 @@ homepage = "https://github.com/AndreasOM/shader-crusher"
 repository = "https://github.com/AndreasOM/shader-crusher"
 keywords = ["tools", "gamedev"]
 categories = ["command-line-utilities","compression","graphics"]
+exclude = ["bench/"]
 
 [[bin]]
 name="shader-crusher"

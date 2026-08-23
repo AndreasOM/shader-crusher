@@ -16,7 +16,9 @@
 
 ## Unreleased
 
-### Version 0.7.0
+## Released
+
+### Version 0.7.0-alpha
 [x] Vendor the glsl 7.0.0 parser in-tree (BSD-3-Clause); detect silently unparsed input (partial parse is an error)
 [x] Errors with exit codes; passthrough output on error; quiet CLI, `--verbose` symbol table; C API returns status + `shadercrusher_get_error`
 [x] Never rename built-in functions of any GLSL version (`texture2D`, `ftransform`, ...), built-in struct members, macro names/bodies/`#if` identifiers, interface block names/members, layout qualifier ids
@@ -27,8 +29,6 @@
 [x] Rewrites: declaration/field merging, block unwrapping, `x=x+y`→`x+=y`, `(void)`/`in`/unary `+` removal, macro squeeze (`--no-rewrite NAME`)
 [x] `--emit-map FILE` with the original→new names of renamed globals
 [x] piglit harness with gzip/xz/zstd sizes, baselines (`PIGLIT_BASELINE`), `PIGLIT_ARGS`, `just piglit-record`; golden tests in data/golden; corpus property test
-
-## Released
 
 ### Version 0.6.0-alpha
 [x] Add `just piglit` recipes to run piglit's glslparsertest corpus through the crusher
