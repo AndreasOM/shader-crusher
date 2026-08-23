@@ -48,6 +48,8 @@ or
 to keep certain identifiers untouched, e.g. uniforms that you need to resolve externaly.
 Keywords, built-in functions, 'main', and reserved identifiers (`gl_*`, anything containing `__`) are automatically blocklisted.
 
+Input may use LF, CRLF or CR line endings; output is always LF.
+
 ## Piglit corpus
 
 [piglit](https://gitlab.freedesktop.org/mesa/piglit)'s `tests/glslparsertest` suite (~530 GLSL 1.10–1.30 shaders, each tagged `expect_result: pass|fail`) doubles as a regression corpus:

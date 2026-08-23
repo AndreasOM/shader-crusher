@@ -20,6 +20,7 @@
 [x] Add `just piglit` recipes to run piglit's glslparsertest corpus through the crusher
 [x] Never rename reserved identifiers (`gl_*`, `__`)
 [x] Strip comments from preprocessor directive lines (parse `#extension ... // c`, stop leaking `#define` comments)
+[x] Normalize line endings (CRLF/CR → LF); 0.5.0-alpha ignored `#pragma SHADER_CRUSHER_*` and leaked `\r` on CRLF sources
 
 ## Released
 

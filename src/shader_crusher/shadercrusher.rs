@@ -429,6 +429,14 @@ impl Counter {
 	}
 }
 
+/// GLSL (§3.2) accepts CR, LF and CRLF as line terminators, but the glsl
+/// crate's directive lexer (`str_till_eol`) keeps a trailing `\r`, which
+/// breaks `#pragma SHADER_CRUSHER_*` matching and leaks `\r` into `#define`
+/// values. Normalize to LF up front; output is always LF.
+fn normalize_line_endings(src: &str) -> String {
+	src.replace("\r\n", "\n").replace('\r', "\n")
+}
+
 /// Remove `// ...` and single-line `/* ... */` comments from preprocessor
 /// directive lines (`#extension`, `#define`, `#pragma`, ...).
 ///
@@ -436,6 +444,7 @@ impl Counter {
 /// "till end of line": a trailing comment after `#extension` is a parse error,
 /// and a comment after `#define X 1` would be copied into the output verbatim.
 /// Non-directive lines are passed through untouched.
+/// Expects LF line endings (see `normalize_line_endings`); re-emits `\n`.
 fn strip_directive_comments(src: &str) -> String {
 	let mut out = String::with_capacity(src.len());
 	for line in src.lines() {
@@ -513,7 +522,7 @@ impl ShaderCrusher {
 	}
 
 	pub fn crush(&mut self) {
-		let source = strip_directive_comments(&self.input);
+		let source = strip_directive_comments(&normalize_line_endings(&self.input));
 		let stage = ShaderStage::parse(&source);
 		//		println!("Stage: {:?}", stage);
 		let mut stage = match stage {
@@ -748,5 +757,38 @@ mod tests {
 		assert!(out.contains("keep_me"), "{out}");
 		assert!(!out.contains("crush_me"), "{out}");
 		assert!(!out.contains("#pragma"), "pragma should be removed: {out}");
+	}
+
+	#[test]
+	fn normalize_line_endings_handles_crlf_and_cr() {
+		assert_eq!(normalize_line_endings("a\r\nb\rc\n"), "a\nb\nc\n");
+		assert_eq!(normalize_line_endings("a\nb"), "a\nb");
+		assert_eq!(normalize_line_endings(""), "");
+	}
+
+	/// Every directive kind the glsl crate lexes "till end of line", plus the
+	/// crusher's own pragmas: with CRLF input, 0.5.0-alpha kept the `\r` in the
+	/// pragma command (so OFF/ON was ignored) and in `#define` values.
+	const LINE_ENDING_FIXTURE: &str = "#version 110\n#extension GL_ARB_shader_texture_lod : enable\n#define SCALE 2.0\n#define SQ(v) ((v)*(v))\n#pragma SHADER_CRUSHER_OFF\nuniform float keep_me;\n#pragma SHADER_CRUSHER_ON\nuniform float crush_me;\nvoid main() {\n\tfloat scaled_value = keep_me * SCALE + SQ(crush_me);\n\tgl_FragColor = vec4(scaled_value);\n}\n";
+
+	fn assert_crushes_like_lf(input: &str) {
+		let expected = crush(LINE_ENDING_FIXTURE);
+		let out = crush(input);
+		assert_eq!(out, expected);
+		assert!(!out.contains('\r'), "CR leaked into output: {out:?}");
+		assert!(out.contains("keep_me"), "pragma OFF ignored: {out}");
+		assert!(!out.contains("crush_me"), "shader was not crushed: {out}");
+		assert!(!out.contains("#pragma"), "pragma should be removed: {out}");
+		assert!(out.contains("#define SCALE 2.0\n"), "{out}");
+	}
+
+	#[test]
+	fn crlf_input_crushes_identically_to_lf() {
+		assert_crushes_like_lf(&LINE_ENDING_FIXTURE.replace('\n', "\r\n"));
+	}
+
+	#[test]
+	fn cr_only_input_crushes_identically_to_lf() {
+		assert_crushes_like_lf(&LINE_ENDING_FIXTURE.replace('\n', "\r"));
 	}
 }
