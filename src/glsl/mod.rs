@@ -18,6 +18,4 @@ mod parsers;
 #[rustfmt::skip]
 pub mod syntax;
 #[rustfmt::skip]
-pub mod transpiler;
-#[rustfmt::skip]
 pub mod visitor;

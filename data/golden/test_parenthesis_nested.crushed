@@ -1,0 +1,2 @@
+#version 410
+void main(){float a=1.;float b=2.;float c=3.;float d=4.;float e=5.;float i=a+b*(c+d*(e-a));float j=(a+b)*(c-d)/(e+a-b*c);float k=max(min(a,b),min(c,d));vec2 f=vec2(a,b);vec2 h=vec2(c,d);float l=(f.x+h.y)*(f.y-h.x);float m=a>b?c>d?e:a:b>c?d:e;bool n=a>b&&c<d||e>=a&&b<=c;vec4 o=vec4(vec3(a,b,c),d);float u=max(a*b+c,min(d/e,(a+b)*(c-d)));gl_FragColor=vec4(i,j,k,1.);}

@@ -3,8 +3,11 @@ mod error;
 mod lexer;
 mod options;
 mod preprocess;
+mod printer;
 mod protect;
+mod selfcheck;
 mod shadercrusher;
+mod simplify;
 
 pub use error::CrushError;
 pub use options::{Options, Scoring};

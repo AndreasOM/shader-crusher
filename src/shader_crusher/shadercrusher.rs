@@ -7,6 +7,7 @@ use libc::{c_char, c_int};
 use super::builtins::{is_builtin_function, is_keyword, is_reserved, is_swizzle, never_generate};
 use super::preprocess::{normalize_line_endings, strip_directive_comments};
 use super::protect::{self, Protection};
+use super::{printer, selfcheck, simplify};
 use super::{CrushError, Options, Scoring};
 use crate::glsl::parser::parse_translation_unit_with_rest;
 use crate::glsl::syntax::*;
@@ -386,6 +387,10 @@ impl ShaderCrusher {
 			eprintln!("Protected field names: {:?}", fields);
 		}
 
+		if self.options.simplify {
+			simplify::run(&mut stage, &simplify::Flags::default());
+		}
+
 		let mut counter = Counter::new(&protection, verbose);
 		stage.visit_mut(&mut counter);
 		if self.options.rename {
@@ -397,10 +402,12 @@ impl ShaderCrusher {
 			eprintln!("Crushed Varnames: {:?}", counter.identifiers_crushed);
 			eprintln!("Uncrushed Varnames: {:?}", counter.identifiers_uncrushed);
 		}
-		let mut glsl_buffer = String::new();
-		crate::glsl::transpiler::glsl::show_translation_unit(&mut glsl_buffer, &stage);
+		let out = printer::print(&stage);
+		if self.options.selfcheck {
+			selfcheck::reparse_equals(&out, &stage)?;
+		}
 
-		self.output = glsl_buffer;
+		self.output = out;
 		self.stats = Stats {
 			input_len:      self.input.len(),
 			output_len:     self.output.len(),
@@ -710,7 +717,7 @@ mod tests {
 		let out = crush(
 			"#define test1 int sum = 1;\nvoid main(void)\n{\n test1\n sum = 2;\n gl_FragColor = vec4(float(sum));\n}\n",
 		);
-		assert!(out.contains("sum = 2;"), "{out}");
+		assert!(out.contains("sum=2;"), "{out}");
 		assert!(out.contains("float(sum)"), "{out}");
 	}
 
@@ -719,11 +726,11 @@ mod tests {
 		let out = crush(
 			"#version 330\nlayout(location = 0) in vec4 in_position;\nlayout(location = 1) out vec4 out_color;\nlayout(std140, binding = 2) uniform Block { vec4 block_member; } block_inst;\nvoid main() { out_color = in_position + block_inst.block_member; }\n",
 		);
-		assert!(out.contains("location = 0"), "{out}");
-		assert!(out.contains("location = 1"), "{out}");
-		assert!(out.contains("std140, binding = 2"), "{out}");
+		assert!(out.contains("location=0"), "{out}");
+		assert!(out.contains("location=1"), "{out}");
+		assert!(out.contains("std140,binding=2"), "{out}");
 		assert!(
-			out.contains("uniform Block {"),
+			out.contains("uniform Block{"),
 			"block name is API-visible: {out}"
 		);
 		assert!(
