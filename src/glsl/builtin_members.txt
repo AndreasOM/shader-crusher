@@ -1,0 +1,10 @@
+# Member names of the built-in structures and blocks that do not carry the
+# gl_ prefix (GLSLangSpec 4.60 §7.4 / §7.1): gl_DepthRangeParameters,
+# gl_PointParameters, gl_MaterialParameters, gl_LightSourceParameters,
+# gl_LightModelParameters, gl_LightModelProducts, gl_LightProducts,
+# gl_FogParameters. A `.member` selector with one of these names is never
+# renamed. One word per line; '#' starts a comment.
+ambient color constantAttenuation density diff diffuse distanceConstantAttenuation
+distanceLinearAttenuation distanceQuadraticAttenuation emission end fadeThresholdSize far
+halfVector linearAttenuation near position quadraticAttenuation scale sceneColor shininess size
+sizeMax sizeMin specular spotCosCutoff spotCutoff spotDirection spotExponent start

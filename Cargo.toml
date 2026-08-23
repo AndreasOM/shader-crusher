@@ -30,4 +30,3 @@ libc = { version="0.2.132" }
 nom = { version="7", default-features=false, features=["std"] }
 regex = { version="1.6.0" }
 
-[build-dependencies]

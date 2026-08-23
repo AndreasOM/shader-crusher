@@ -1,0 +1,68 @@
+# GLSL keywords and reserved words: union over desktop GLSL 1.10-4.60 (core +
+# compatibility), GLSL ES 1.00-3.20, Vulkan GLSL, and the extension keywords
+# glslang recognises. One word per line; '#' starts a comment.
+# Sources: GLSLangSpec §3.6 "Keywords" of each version; glslang Scan.cpp.
+#
+# --- core union -------------------------------------------------------------
+active asm atomic_uint attribute bool break buffer bvec2 bvec3 bvec4 case cast centroid class
+coherent column_major common const continue default discard dmat2 dmat2x2 dmat2x3 dmat2x4 dmat3
+dmat3x2 dmat3x3 dmat3x4 dmat4 dmat4x2 dmat4x3 dmat4x4 do double dvec2 dvec3 dvec4 else enum extern
+external false filter fixed flat float for fvec2 fvec3 fvec4 goto half highp hvec2 hvec3 hvec4
+if iimage1D iimage1DArray iimage2D iimage2DArray iimage2DMS iimage2DMSArray iimage2DRect iimage3D
+iimageBuffer iimageCube iimageCubeArray image1D image1DArray image1DArrayShadow image1DShadow
+image2D image2DArray image2DArrayShadow image2DMS image2DMSArray image2DRect image2DShadow image3D
+imageBuffer imageCube imageCubeArray in inline inout input int interface invariant isampler1D
+isampler1DArray isampler2D isampler2DArray isampler2DMS isampler2DMSArray isampler2DRect isampler3D
+isamplerBuffer isamplerCube isamplerCubeArray isubpassInput isubpassInputMS itexture1D
+itexture1DArray itexture2D itexture2DArray itexture2DMS itexture2DMSArray itexture2DRect itexture3D
+itextureBuffer itextureCube itextureCubeArray ivec2 ivec3 ivec4 layout long lowp mat2 mat2x2 mat2x3
+mat2x4 mat3 mat3x2 mat3x3 mat3x4 mat4 mat4x2 mat4x3 mat4x4 mediump namespace noinline noperspective
+out output packed partition patch precise precision public readonly resource restrict return
+row_major sample sampler sampler1D sampler1DArray sampler1DArrayShadow sampler1DShadow sampler2D
+sampler2DArray sampler2DArrayShadow sampler2DMS sampler2DMSArray sampler2DRect sampler2DRectShadow
+sampler2DShadow sampler3D sampler3DRect samplerBuffer samplerCube samplerCubeArray
+samplerCubeArrayShadow samplerCubeShadow samplerShadow shared short sizeof smooth static struct
+subpassInput subpassInputMS subroutine superp switch template texture1D texture1DArray texture2D
+texture2DArray texture2DMS texture2DMSArray texture2DRect texture3D textureBuffer textureCube
+textureCubeArray this true typedef uimage1D uimage1DArray uimage2D uimage2DArray uimage2DMS
+uimage2DMSArray uimage2DRect uimage3D uimageBuffer uimageCube uimageCubeArray uint
+union uniform unsigned usampler1D usampler1DArray usampler2D usampler2DArray usampler2DMS
+usampler2DMSArray usampler2DRect usampler3D usamplerBuffer usamplerCube usamplerCubeArray
+using usubpassInput usubpassInputMS utexture1D utexture1DArray utexture2D utexture2DArray
+utexture2DMS utexture2DMSArray utexture2DRect utexture3D utextureBuffer utextureCube
+utextureCubeArray uvec2 uvec3 uvec4 varying vec2 vec3 vec4 void volatile while writeonly
+#
+# --- extension keywords recognised by glslang -------------------------------
+__explicitInterpAMD __function __samplerExternal2DY2YEXT accelerationStructureEXT
+accelerationStructureNV attachmentEXT bf16vec2 bf16vec3 bf16vec4 bfloat16_t callableDataEXT
+callableDataInEXT callableDataInNV callableDataNV coopmat coopvecNV demote devicecoherent
+f16image1D f16image1DArray f16image2D f16image2DArray f16image2DMS f16image2DMSArray f16image2DRect
+f16image3D f16imageBuffer f16imageCube f16imageCubeArray f16mat2 f16mat2x2 f16mat2x3 f16mat2x4
+f16mat3 f16mat3x2 f16mat3x3 f16mat3x4 f16mat4 f16mat4x2 f16mat4x3 f16mat4x4 f16sampler1D
+f16sampler1DArray f16sampler1DArrayShadow f16sampler1DShadow f16sampler2D f16sampler2DArray
+f16sampler2DArrayShadow f16sampler2DMS f16sampler2DMSArray f16sampler2DRect f16sampler2DRectShadow
+f16sampler2DShadow f16sampler3D f16samplerBuffer f16samplerCube f16samplerCubeArray
+f16samplerCubeArrayShadow f16samplerCubeShadow f16subpassInput f16subpassInputMS f16texture1D
+f16texture1DArray f16texture2D f16texture2DArray f16texture2DMS f16texture2DMSArray f16texture2DRect
+f16texture3D f16textureBuffer f16textureCube f16textureCubeArray f16vec2 f16vec3 f16vec4 f32mat2
+f32mat2x2 f32mat2x3 f32mat2x4 f32mat3 f32mat3x2 f32mat3x3 f32mat3x4 f32mat4 f32mat4x2 f32mat4x3
+f32mat4x4 f32vec2 f32vec3 f32vec4 f64mat2 f64mat2x2 f64mat2x3 f64mat2x4 f64mat3 f64mat3x2 f64mat3x3
+f64mat3x4 f64mat4 f64mat4x2 f64mat4x3 f64mat4x4 f64vec2 f64vec3 f64vec4 fcoopmatNV fe2m1vec2
+fe2m1vec3 fe2m1vec4 fe2m3vec2 fe2m3vec3 fe2m3vec4 fe3m2vec2 fe3m2vec3 fe3m2vec4 fe4m3vec2 fe4m3vec3
+fe4m3vec4 fe5m2vec2 fe5m2vec3 fe5m2vec4 float16_t float32_t float64_t floate2m1_t floate2m3_t
+floate3m2_t floate4m3_t floate5m2_t floatmxint8_t floatue8m0_t fmxint8vec2 fmxint8vec3 fmxint8vec4
+fue8m0vec2 fue8m0vec3 fue8m0vec4 hitAttributeEXT hitAttributeNV hitObjectAttributeEXT
+hitObjectAttributeNV hitObjectEXT hitObjectNV i16vec2 i16vec3 i16vec4 i32vec2 i32vec3 i32vec4
+i64image1D i64image1DArray i64image2D i64image2DArray i64image2DMS i64image2DMSArray i64image2DRect
+i64image3D i64imageBuffer i64imageCube i64imageCubeArray i64vec2 i64vec3 i64vec4 i8vec2 i8vec3
+i8vec4 iattachmentEXT icoopmatNV ignoreIntersectionEXT int16_t int32_t int64_t int8_t nonprivate
+nontemporal nonuniformEXT perprimitiveEXT perprimitiveNV pervertexEXT pervertexNV perviewNV
+queuefamilycoherent rayPayloadEXT rayPayloadInEXT rayPayloadInNV rayPayloadNV rayQueryEXT
+resourceheap samplerExternalOES samplerheap shadercallcoherent spirv_by_reference spirv_decorate
+spirv_decorate_id spirv_decorate_string spirv_execution_mode spirv_execution_mode_id
+spirv_instruction spirv_literal spirv_storage_class spirv_type subgroupcoherent taskNV
+taskPayloadSharedEXT tensorARM tensorLayoutNV tensorViewNV terminateInvocation terminateRayEXT
+tileImageEXT u16vec2 u16vec3 u16vec4 u32vec2 u32vec3 u32vec4 u64image1D u64image1DArray u64image2D
+u64image2DArray u64image2DMS u64image2DMSArray u64image2DRect u64image3D u64imageBuffer u64imageCube
+u64imageCubeArray u64vec2 u64vec3 u64vec4 u8vec2 u8vec3 u8vec4 uattachmentEXT ucoopmatNV uint16_t
+uint32_t uint64_t uint8_t vector workgroupcoherent

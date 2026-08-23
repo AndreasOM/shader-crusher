@@ -1,6 +1,9 @@
+mod builtins;
 mod error;
+mod lexer;
 mod options;
 mod preprocess;
+mod protect;
 mod shadercrusher;
 
 pub use error::CrushError;

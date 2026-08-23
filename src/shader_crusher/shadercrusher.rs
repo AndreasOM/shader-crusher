@@ -1,17 +1,16 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ffi::{CStr, CString};
 use std::fmt;
 
 use libc::{c_char, c_int};
-use regex::Regex;
 
+use super::builtins::{is_builtin_function, is_keyword, is_reserved, is_swizzle, never_generate};
 use super::preprocess::{normalize_line_endings, strip_directive_comments};
+use super::protect::{self, Protection};
 use super::{CrushError, Options, Scoring};
 use crate::glsl::parser::parse_translation_unit_with_rest;
 use crate::glsl::syntax::*;
 use crate::glsl::visitor::{HostMut, Visit, VisitorMut};
-
-include!(concat!(env!("OUT_DIR"), "/glsl_keywords.rs"));
 
 struct IdentEntry {
 	crushed_name: String,
@@ -52,16 +51,15 @@ impl IdentMap {
 			entries: HashMap::new(),
 		}
 	}
-	fn contains(&self, k: &str) -> bool {
-		self.entries.contains_key(k)
-	}
 	fn keys(&self) -> Vec<String> {
 		self.entries.keys().map(|k| k.into()).collect()
 	}
 	fn len(&self) -> usize {
 		self.entries.len()
 	}
-	fn crush(&mut self, used_identifiers: Vec<String>, blocklist: &[String]) {
+	/// Assign short names by descending use count. `forbidden` rejects
+	/// candidate names that already mean something in this shader.
+	fn crush(&mut self, forbidden: &dyn Fn(&str) -> bool) {
 		let mut candidates = Vec::new();
 		// :TODO: be smarter ;)
 		// :TODO: e.g. count frequency of characters in input and use most used ones
@@ -77,10 +75,9 @@ impl IdentMap {
 			let c = c as char;
 			candidates.push(c.to_string());
 		}
-		// filter out used identifiers to avoid unwanted aliasing
 		let mut candidates = candidates
 			.into_iter()
-			.filter(|n| !used_identifiers.contains(n) && !blocklist.contains(n))
+			.filter(|n| !forbidden(n))
 			.collect::<Vec<String>>();
 
 		let mut count_index = Vec::new();
@@ -126,62 +123,68 @@ enum CounterPhase {
 	Crushing,
 }
 
+/// Flat (one namespace) identifier renamer. Interim: replaced by the
+/// scope-aware renamer in a later step.
 struct Counter {
 	phase:                 CounterPhase,
-	blocklist:             Vec<String>,
-	crushing:              bool,
+	/// Names pinned by `protect` (macros, OFF regions, blocklist, blocks,
+	/// built-in members seen as selectors).
+	pinned:                HashSet<String>,
 	verbose:               bool,
 	identifiers_crushed:   IdentMap,
 	identifiers_uncrushed: IdentMap,
 }
 
 impl Counter {
-	pub fn new(verbose: bool) -> Counter {
+	pub fn new(protection: &Protection, verbose: bool) -> Counter {
+		let mut pinned = protection.names.clone();
+		pinned.extend(protection.field_names.iter().cloned());
 		Counter {
 			phase: CounterPhase::Analysing,
-			blocklist: vec!["main".to_string()],
-			crushing: true,
+			pinned,
 			verbose,
 			identifiers_crushed: IdentMap::new(),
 			identifiers_uncrushed: IdentMap::new(),
 		}
 	}
 
+	/// A name that must not be used for anything else in this shader.
+	fn is_pinned(&self, n: &str) -> bool {
+		is_reserved(n)
+			|| is_keyword(n)
+			|| is_builtin_function(n)
+			|| is_swizzle(n)
+			|| self.pinned.contains(n)
+	}
+
 	pub fn crush_names(&mut self) {
-		self.identifiers_crushed
-			.crush(self.identifiers_uncrushed.keys().to_vec(), &self.blocklist);
+		let uncrushed = self.identifiers_uncrushed.keys();
+		let pinned = &self.pinned;
+		let forbidden = |n: &str| {
+			never_generate(n)
+				|| is_swizzle(n)
+				|| pinned.contains(n)
+				|| uncrushed.iter().any(|u| u == n)
+		};
+		self.identifiers_crushed.crush(&forbidden);
 	}
 }
 impl VisitorMut for Counter {
-	fn visit_preprocessor_define(&mut self, pd: &mut PreprocessorDefine) -> Visit {
-		let ident = match pd {
-			PreprocessorDefine::ObjectLike { ident, .. } => ident,
-			PreprocessorDefine::FunctionLike { ident, .. } => ident,
-		};
-		if self.phase == CounterPhase::Analysing {
-			let c = self.crushing;
-			self.crushing = false;
-			// :HACK: always add #define identifiers as uncrushed, so we don't have to parse all potential usages
-			self.add_identifier(&ident.0.clone());
-			self.crushing = c;
-		}
-		Visit::Children
+	/// Macro lines are opaque: the name and body identifiers are pinned by
+	/// `protect`, the parameters belong to the line alone.
+	fn visit_preprocessor_define(&mut self, _pd: &mut PreprocessorDefine) -> Visit {
+		Visit::Parent
 	}
 
-	fn visit_preprocessor_pragma(&mut self, pragma: &mut PreprocessorPragma) -> Visit {
-		match pragma.command.as_ref() {
-			"SHADER_CRUSHER_OFF" => {
-				self.crushing = false;
-				pragma.command = "".to_string(); // no idea how to remove the pragma completely :(
-			},
-			"SHADER_CRUSHER_ON" => {
-				self.crushing = true;
-				pragma.command = "".to_string();
-			},
-			_ => {},
+	/// `layout(location = 0)`: the qualifier name is an identifier to the
+	/// parser but a keyword to the compiler; only the value is an expression.
+	fn visit_layout_qualifier_spec(&mut self, l: &mut LayoutQualifierSpec) -> Visit {
+		if let LayoutQualifierSpec::Identifier(_, Some(e)) = l {
+			e.visit_mut(self);
 		}
-		Visit::Children
+		Visit::Parent
 	}
+
 	fn visit_identifier(&mut self, e: &mut Identifier) -> Visit {
 		let Identifier(i) = e;
 		match self.phase {
@@ -219,48 +222,20 @@ impl VisitorMut for Counter {
 }
 
 impl Counter {
-	/// Identifiers reserved by the GLSL spec: anything starting with `gl_`
-	/// (built-in variables, constants, functions) and anything containing `__`.
-	/// They are never renamed, independent of the blocklist.
-	fn is_reserved(n: &str) -> bool {
-		n.starts_with("gl_") || n.contains("__")
-	}
 	fn add_identifier(&mut self, n: &str) {
-		let blocklisted = Self::is_reserved(n) || self.blocklist.iter().any(|s| s == n);
-		let uncrushed = self.identifiers_uncrushed.contains(n);
-		let crush = self.crushing && !blocklisted && !uncrushed;
-		let c = if crush {
-			self.identifiers_crushed.add(n)
-		} else {
+		let pinned = self.is_pinned(n);
+		let c = if pinned {
 			self.identifiers_uncrushed.add(n)
+		} else {
+			self.identifiers_crushed.add(n)
 		};
 		if self.verbose {
 			eprintln!(
-				"{: >8} x {: <20} {} {} {} {}",
+				"{: >8} x {: <20} {}",
 				c,
 				n,
-				if crush { "[-crushed-]" } else { "[uncrushed]" },
-				if self.crushing {
-					"[--CRUSHING--]"
-				} else {
-					"[NOT CRUSHING]"
-				},
-				if blocklisted {
-					"[--BLOCKLISTED--]"
-				} else {
-					"[NOT BLOCKLISTED]"
-				},
-				if uncrushed {
-					"[--UNCRUSHED--]"
-				} else {
-					"[NOT UNCRUSHED]"
-				},
+				if pinned { "[uncrushed]" } else { "[-crushed-]" },
 			);
-		}
-	}
-	fn blocklist_identifier(&mut self, n: &str) {
-		if !self.blocklist.contains(&n.to_string()) {
-			self.blocklist.push(n.to_string());
 		}
 	}
 }
@@ -308,15 +283,13 @@ pub fn crush_str(src: &str, opts: &Options) -> Result<(String, Stats), CrushErro
 }
 
 pub struct ShaderCrusher {
-	input:             String,
-	output:            String,
-	options:           Options,
-	stats:             Stats,
-	last_error:        Option<CrushError>,
+	input:        String,
+	output:       String,
+	options:      Options,
+	stats:        Stats,
+	last_error:   Option<CrushError>,
 	/// C string copy of `last_error` for `shadercrusher_get_error`.
-	last_error_c:      Option<CString>,
-	/// Keywords, builtins and swizzles; never renamed.
-	keyword_blocklist: Vec<String>,
+	last_error_c: Option<CString>,
 }
 
 impl ShaderCrusher {
@@ -332,7 +305,6 @@ impl ShaderCrusher {
 			stats: Stats::default(),
 			last_error: None,
 			last_error_c: None,
-			keyword_blocklist: GlslKeywords::get(),
 		}
 	}
 
@@ -404,13 +376,17 @@ impl ShaderCrusher {
 			return Err(CrushError::PartialParse { consumed, rest });
 		}
 
-		let mut counter = Counter::new(verbose);
-		for n in &self.keyword_blocklist {
-			counter.blocklist_identifier(n);
+		let protection = protect::run(&mut stage, &self.options.blocklist)?;
+		if verbose {
+			let mut names: Vec<_> = protection.names.iter().collect();
+			names.sort();
+			eprintln!("Protected names: {:?}", names);
+			let mut fields: Vec<_> = protection.field_names.iter().collect();
+			fields.sort();
+			eprintln!("Protected field names: {:?}", fields);
 		}
-		for n in &self.options.blocklist {
-			counter.blocklist_identifier(n);
-		}
+
+		let mut counter = Counter::new(&protection, verbose);
 		stage.visit_mut(&mut counter);
 		if self.options.rename {
 			counter.crush_names();
@@ -424,29 +400,7 @@ impl ShaderCrusher {
 		let mut glsl_buffer = String::new();
 		crate::glsl::transpiler::glsl::show_translation_unit(&mut glsl_buffer, &stage);
 
-		// cleanup empty pragmas
-		let re = Regex::new(r"(?m)^\s*#\s*pragma\s*$").unwrap();
-		let glsl_buffer = re.replace_all(&glsl_buffer, "");
-
-		// cleanup double braces e.g. "((x))"
-		let re = Regex::new(r"(?m)\(\(([a-zA-Z0-9.]+)\)").unwrap();
-		let glsl_buffer = re.replace_all(&glsl_buffer, |c: &regex::Captures| {
-			let inner = c.get(1).map_or("", |m| m.as_str());
-			format!("({}", inner)
-		});
-		let re = Regex::new(r"(?m)\(\(([a-zA-Z0-9.]+)\)").unwrap();
-		let glsl_buffer = re.replace_all(&glsl_buffer, |c: &regex::Captures| {
-			let inner = c.get(1).map_or("", |m| m.as_str());
-			format!("({}", inner)
-		});
-		let re = Regex::new(r"(?m)([-+*<>=]+)\(([a-zA-Z0-9.]+)\)").unwrap();
-		let glsl_buffer = re.replace_all(&glsl_buffer, |c: &regex::Captures| {
-			let prefix = c.get(1).map_or("", |m| m.as_str());
-			let inner = c.get(2).map_or("", |m| m.as_str());
-			format!("{}{}", prefix, inner)
-		});
-
-		self.output = glsl_buffer.to_string();
+		self.output = glsl_buffer;
 		self.stats = Stats {
 			input_len:      self.input.len(),
 			output_len:     self.output.len(),
@@ -701,6 +655,86 @@ mod tests {
 			},
 			e => panic!("expected PartialParse, got {e:?}"),
 		}
+	}
+
+	#[test]
+	fn legacy_builtin_functions_are_never_renamed() {
+		let out = crush(
+			"#version 110\nuniform sampler2D tex_a;\nuniform sampler2DRect tex_b;\nuniform samplerCube tex_c;\nuniform sampler2DShadow tex_d;\nvoid main() {\n\tgl_Position = ftransform();\n\tvec4 accum = texture2D(tex_a, gl_MultiTexCoord0.xy) + texture2DRect(tex_b, gl_MultiTexCoord0.xy) + textureCube(tex_c, gl_Normal) + shadow2D(tex_d, gl_Normal) + vec4(noise1(gl_Normal.x));\n\tgl_FrontColor = accum;\n}\n",
+		);
+		for f in [
+			"ftransform()",
+			"texture2D(",
+			"texture2DRect(",
+			"textureCube(",
+			"shadow2D(",
+			"noise1(",
+		] {
+			assert!(out.contains(f), "{f} was renamed: {out}");
+		}
+		assert!(!out.contains("tex_a") && !out.contains("accum"), "{out}");
+	}
+
+	#[test]
+	fn builtin_struct_members_are_never_renamed() {
+		let out = crush(
+			"#version 110\nstruct Light { vec3 dir; float intensity; };\nuniform Light light_src;\nvoid main() {\n\tvec4 p = gl_LightSource[0].position;\n\tvec4 d = gl_FrontMaterial.diffuse * gl_Fog.color;\n\tgl_FragColor = p + d + vec4(light_src.dir, light_src.intensity) + vec4(gl_DepthRange.near, gl_DepthRange.far, gl_Point.size, 1.0);\n}\n",
+		);
+		for m in [".position", ".diffuse", ".color", ".near", ".far", ".size"] {
+			assert!(out.contains(m), "{m} was renamed: {out}");
+		}
+		assert!(
+			!out.contains("intensity"),
+			"user struct field must be crushed: {out}"
+		);
+	}
+
+	#[test]
+	fn macro_lines_are_left_alone() {
+		let out = crush(
+			"#version 110\n#define SQ(v) ((v)*(v))\n#define NEG(q) -(q)\n#define HALF (scale_factor*0.5)\nuniform float scale_factor;\nuniform float other_value;\nvoid main() {\n\tfloat v = other_value;\n\tgl_FragColor = vec4(SQ(v) + NEG(v) + HALF);\n}\n",
+		);
+		assert!(out.contains("#define SQ(v) ((v)*(v))\n"), "{out}");
+		assert!(out.contains("#define NEG(q) -(q)\n"), "{out}");
+		assert!(out.contains("#define HALF (scale_factor*0.5)\n"), "{out}");
+		assert!(
+			out.contains("uniform float scale_factor;"),
+			"macro body reference must pin the uniform: {out}"
+		);
+		assert!(!out.contains("other_value"), "{out}");
+	}
+
+	#[test]
+	fn identifiers_declared_inside_macro_bodies_are_pinned() {
+		// piglit CorrectPreprocess5.frag: `sum` only exists inside the macro
+		let out = crush(
+			"#define test1 int sum = 1;\nvoid main(void)\n{\n test1\n sum = 2;\n gl_FragColor = vec4(float(sum));\n}\n",
+		);
+		assert!(out.contains("sum = 2;"), "{out}");
+		assert!(out.contains("float(sum)"), "{out}");
+	}
+
+	#[test]
+	fn layout_qualifier_names_are_never_renamed() {
+		let out = crush(
+			"#version 330\nlayout(location = 0) in vec4 in_position;\nlayout(location = 1) out vec4 out_color;\nlayout(std140, binding = 2) uniform Block { vec4 block_member; } block_inst;\nvoid main() { out_color = in_position + block_inst.block_member; }\n",
+		);
+		assert!(out.contains("location = 0"), "{out}");
+		assert!(out.contains("location = 1"), "{out}");
+		assert!(out.contains("std140, binding = 2"), "{out}");
+		assert!(
+			out.contains("uniform Block {"),
+			"block name is API-visible: {out}"
+		);
+		assert!(
+			out.contains("block_member"),
+			"block members are API-visible: {out}"
+		);
+		assert!(
+			!out.contains("block_inst"),
+			"block instance names are private: {out}"
+		);
+		assert!(!out.contains("in_position"), "{out}");
 	}
 
 	#[test]
