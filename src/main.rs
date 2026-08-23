@@ -80,6 +80,12 @@ pub fn main() {
 						.help("How new names are chosen: count = bigram contexts weighted by occurrence (best after compression), bigram = unweighted, freq = most frequent letter first"),
 				)
 				.arg(
+					Arg::new("emit-map")
+						.long("emit-map")
+						.value_name("FILE")
+						.help("Write `original<TAB>new` for every renamed global (uniforms, attributes, ...) to FILE"),
+				)
+				.arg(
 					Arg::new("dump-input")
 						.long("dump-input")
 						.action(ArgAction::SetTrue)
@@ -145,6 +151,17 @@ pub fn main() {
 	let code = match sc.crush() {
 		Ok(()) => {
 			eprintln!("{}: {}", input, sc.stats());
+			if let Some(map) = sub_matches.get_one::<String>("emit-map") {
+				let text: String = sc
+					.rename_map()
+					.iter()
+					.map(|(o, n)| format!("{}\t{}\n", o, n))
+					.collect();
+				if let Err(e) = fs::write(map, text) {
+					eprintln!("error: cannot write {}: {}", map, e);
+					std::process::exit(1);
+				}
+			}
 			0
 		},
 		Err(e) => {

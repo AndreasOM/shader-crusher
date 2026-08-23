@@ -55,6 +55,9 @@ pub struct ShaderCrusher {
 	output:       String,
 	options:      Options,
 	stats:        Stats,
+	/// `(original, new)` for every renamed global (uniforms, attributes,
+	/// varyings, functions, ...), in declaration order.
+	rename_map:   Vec<(String, String)>,
 	last_error:   Option<CrushError>,
 	/// C string copy of `last_error` for `shadercrusher_get_error`.
 	last_error_c: Option<CString>,
@@ -71,9 +74,16 @@ impl ShaderCrusher {
 			output: String::new(),
 			options,
 			stats: Stats::default(),
+			rename_map: Vec::new(),
 			last_error: None,
 			last_error_c: None,
 		}
+	}
+
+	/// `(original, new)` name of every renamed global of the last crush:
+	/// what an application must use to address uniforms/attributes by name.
+	pub fn rename_map(&self) -> &[(String, String)] {
+		&self.rename_map
 	}
 
 	pub fn options(&self) -> &Options {
@@ -98,6 +108,7 @@ impl ShaderCrusher {
 			output_entropy: entropy::metric_entropy(self.output.as_bytes()),
 			..Stats::default()
 		};
+		self.rename_map.clear();
 		self.last_error = None;
 		self.last_error_c = None;
 	}
@@ -181,6 +192,12 @@ impl ShaderCrusher {
 		}
 
 		self.output = out;
+		self.rename_map = table
+			.symbols
+			.iter()
+			.filter(|s| s.scope == 0)
+			.filter_map(|s| s.new_name.as_ref().map(|n| (s.name.clone(), n.clone())))
+			.collect();
 		self.stats = Stats {
 			input_len:      self.input.len(),
 			output_len:     self.output.len(),

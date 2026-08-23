@@ -14,12 +14,14 @@ pub fn normalize_line_endings(src: &str) -> String {
 /// The glsl parser handles comments in code, but directive lines are lexed
 /// "till end of line": a trailing comment after `#extension` is a parse error,
 /// and a comment after `#define X 1` would be copied into the output verbatim.
-/// Non-directive lines are passed through untouched.
+/// Non-directive lines are passed through untouched. A line continued with
+/// a trailing `\` keeps the following line inside the directive.
 /// Expects LF line endings (see `normalize_line_endings`); re-emits `\n`.
 pub fn strip_directive_comments(src: &str) -> String {
 	let mut out = String::with_capacity(src.len());
+	let mut continued = false;
 	for line in src.lines() {
-		if line.trim_start().starts_with('#') {
+		if continued || line.trim_start().starts_with('#') {
 			let line = match line.find("//") {
 				Some(pos) => &line[..pos],
 				None => line,
@@ -31,8 +33,11 @@ pub fn strip_directive_comments(src: &str) -> String {
 					None => break, // block comment continues on the next line; leave it to the parser
 				}
 			}
-			out.push_str(line.trim_end());
+			let line = line.trim_end();
+			continued = line.ends_with('\\');
+			out.push_str(line);
 		} else {
+			continued = false;
 			out.push_str(line);
 		}
 		out.push('\n');
@@ -57,6 +62,13 @@ mod tests {
 			"#define A 1\n"
 		);
 		assert_eq!(strip_directive_comments(""), "");
+		// continuation lines belong to the directive
+		assert_eq!(
+			strip_directive_comments(
+				"#define M a \\\n  b /* c */ \\\n  d // e\nfloat x; // keep\n"
+			),
+			"#define M a \\\n  b   \\\n  d\nfloat x; // keep\n"
+		);
 	}
 
 	#[test]
