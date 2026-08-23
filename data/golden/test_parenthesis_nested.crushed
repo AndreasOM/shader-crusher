@@ -1,2 +1,2 @@
 #version 410
-void main(){float a=1.;float b=2.;float c=3.;float d=4.;float e=5.;float i=a+b*(c+d*(e-a));float j=(a+b)*(c-d)/(e+a-b*c);float k=max(min(a,b),min(c,d));vec2 f=vec2(a,b);vec2 h=vec2(c,d);float l=(f.x+h.y)*(f.y-h.x);float m=a>b?c>d?e:a:b>c?d:e;bool n=a>b&&c<d||e>=a&&b<=c;vec4 o=vec4(vec3(a,b,c),d);float u=max(a*b+c,min(d/e,(a+b)*(c-d)));gl_FragColor=vec4(i,j,k,1.);}
+void main(){float o=1.;float a=2.;float l=3.;float f=4.;float t=5.;float v=o+a*(l+f*(t-o));float e=(o+a)*(l-f)/(t+o-a*l);float c=max(min(o,a),min(l,f));vec2 i=vec2(o,a);vec2 m=vec2(l,f);float n=(i.x+m.y)*(i.y-m.x);float x=o>a?l>f?t:o:a>l?f:t;bool r=o>a&&l<f||t>=o&&a<=l;vec4 g=vec4(vec3(o,a,l),f);float y=max(o*a+l,min(f/t,(o+a)*(l-f)));gl_FragColor=vec4(v,e,c,1.);}

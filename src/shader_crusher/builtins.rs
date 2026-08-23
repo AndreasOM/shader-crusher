@@ -1,5 +1,5 @@
-//! Names the GLSL language owns: keywords, built-in functions, members of
-//! built-in structures, reserved prefixes and swizzle selectors.
+//! Names the GLSL language owns: keywords, built-in functions, reserved
+//! prefixes and swizzle selectors.
 //!
 //! The word lists live in `src/glsl/*.txt` (one word per line, `#` comments)
 //! and are the union over every GLSL / GLSL ES version plus the extensions
@@ -25,11 +25,6 @@ fn builtin_functions() -> &'static HashSet<&'static str> {
 	SET.get_or_init(|| words(include_str!("../glsl/builtin_functions.txt")))
 }
 
-fn builtin_members() -> &'static HashSet<&'static str> {
-	static SET: OnceLock<HashSet<&'static str>> = OnceLock::new();
-	SET.get_or_init(|| words(include_str!("../glsl/builtin_members.txt")))
-}
-
 /// Keyword or reserved word in any GLSL version (includes the built-in type
 /// names such as `vec4`, `sampler2D`, `float16_t`).
 pub fn is_keyword(s: &str) -> bool {
@@ -39,12 +34,6 @@ pub fn is_keyword(s: &str) -> bool {
 /// Built-in function in any GLSL version or known extension.
 pub fn is_builtin_function(s: &str) -> bool {
 	builtin_functions().contains(s)
-}
-
-/// Member name of a built-in structure (`gl_LightSource[0].position`,
-/// `gl_DepthRange.near`, ...). Only meaningful after a `.`.
-pub fn is_builtin_member(s: &str) -> bool {
-	builtin_members().contains(s)
 }
 
 /// Reserved by the spec: `gl_` / `GL_` prefix (built-in variables, predefined
@@ -116,19 +105,6 @@ mod tests {
 		] {
 			assert!(is_builtin_function(f), "{f}");
 		}
-		for m in [
-			"position",
-			"diffuse",
-			"specular",
-			"halfVector",
-			"near",
-			"far",
-			"color",
-			"size",
-		] {
-			assert!(is_builtin_member(m), "{m}");
-		}
-		assert!(!is_builtin_member("foo"));
 		// no 1- or 2-letter builtin function, so the short pool only loses keywords
 		assert!(builtin_functions().iter().all(|f| f.len() > 2));
 		assert!(keywords().iter().filter(|k| k.len() <= 2).count() == 3);

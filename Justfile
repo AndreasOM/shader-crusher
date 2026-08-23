@@ -49,12 +49,12 @@ piglit-fetch ref="main":
 #	UNSUPPORTED	   exit 3: valid GLSL the crusher does not handle
 #	CRASH		   any other exit code
 #	ROUNDTRIP_FAIL crushing the crushed output fails
-#	ROUNDTRIP_GROW crushing the crushed output grows it (renaming not idempotent); informative, not fatal by default
+#	ROUNDTRIP_GROW crushing the crushed output grows it (renaming not idempotent)
 #	GL_RENAMED	   the set of `gl_*` names differs between input (comments stripped) and output
 #	VALIDATE_FAIL  $GLSL_VALIDATOR (e.g. glslangValidator) rejected an OK output
 # Compressed sizes are what the tool optimises for; the "concatenated" line compresses all OK outputs as one
 # stream (closer to an intro's shader blob). Set PIGLIT_BASELINE=<old report.tsv> to diff against a previous run.
-# Exit is non-zero if any status in $PIGLIT_FATAL occurs (default: "CRASH ROUNDTRIP_FAIL GL_RENAMED SELFCHECK_FAIL").
+# Exit is non-zero if any status in $PIGLIT_FATAL occurs (default: "CRASH ROUNDTRIP_FAIL ROUNDTRIP_GROW GL_RENAMED SELFCHECK_FAIL").
 [doc("Run every `expect_result: pass` piglit shader through the crusher; report + gate (see comments)")]
 piglit pattern="*":
 	#!/usr/bin/env sh
@@ -68,7 +68,7 @@ piglit pattern="*":
 	mkdir -p "$results/out" "$results/log"
 	report="$results/report.tsv"
 	: > "$report"
-	fatal="${PIGLIT_FATAL:-CRASH ROUNDTRIP_FAIL GL_RENAMED SELFCHECK_FAIL}"
+	fatal="${PIGLIT_FATAL:-CRASH ROUNDTRIP_FAIL ROUNDTRIP_GROW GL_RENAMED SELFCHECK_FAIL}"
 	validator="${GLSL_VALIDATOR:-}"
 	tmp="$results/roundtrip.glsl"
 	allok="$results/all_ok.glsl"

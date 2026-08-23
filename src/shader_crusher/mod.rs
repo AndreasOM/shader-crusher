@@ -5,6 +5,8 @@ mod options;
 mod preprocess;
 mod printer;
 mod protect;
+mod rename;
+mod scope;
 mod selfcheck;
 mod shadercrusher;
 mod simplify;

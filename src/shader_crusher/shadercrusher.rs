@@ -1,245 +1,12 @@
-use std::collections::{HashMap, HashSet};
 use std::ffi::{CStr, CString};
 use std::fmt;
 
 use libc::{c_char, c_int};
 
-use super::builtins::{is_builtin_function, is_keyword, is_reserved, is_swizzle, never_generate};
 use super::preprocess::{normalize_line_endings, strip_directive_comments};
-use super::protect::{self, Protection};
-use super::{printer, selfcheck, simplify};
+use super::{printer, protect, rename, scope, selfcheck, simplify};
 use super::{CrushError, Options, Scoring};
 use crate::glsl::parser::parse_translation_unit_with_rest;
-use crate::glsl::syntax::*;
-use crate::glsl::visitor::{HostMut, Visit, VisitorMut};
-
-struct IdentEntry {
-	crushed_name: String,
-	count:        u32,
-}
-
-impl fmt::Debug for IdentEntry {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "{} (*{})", self.crushed_name, self.count)
-	}
-}
-
-impl IdentEntry {
-	pub fn new(n: &str) -> IdentEntry {
-		IdentEntry {
-			crushed_name: n.to_string(),
-			count:        0,
-		}
-	}
-	fn set_crushed_name(&mut self, cn: &str) {
-		self.crushed_name = cn.to_string();
-	}
-}
-
-struct IdentMap {
-	entries: HashMap<String, IdentEntry>,
-}
-
-impl fmt::Debug for IdentMap {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "entries: {:#?}", self.entries)
-	}
-}
-
-impl IdentMap {
-	pub fn new() -> IdentMap {
-		IdentMap {
-			entries: HashMap::new(),
-		}
-	}
-	fn keys(&self) -> Vec<String> {
-		self.entries.keys().map(|k| k.into()).collect()
-	}
-	fn len(&self) -> usize {
-		self.entries.len()
-	}
-	/// Assign short names by descending use count. `forbidden` rejects
-	/// candidate names that already mean something in this shader.
-	fn crush(&mut self, forbidden: &dyn Fn(&str) -> bool) {
-		let mut candidates = Vec::new();
-		// :TODO: be smarter ;)
-		// :TODO: e.g. count frequency of characters in input and use most used ones
-		// :TODO: provide more than 26 candidates, or generate them on the fly when needed
-		for c in (b'a'..=b'z').rev() {
-			let c = c as char;
-			for c2 in (b'a'..=b'z').rev() {
-				let c2 = c2 as char;
-				candidates.push(format!("{}{}", c, c2).to_string());
-			}
-		}
-		for c in (b'a'..=b'z').rev() {
-			let c = c as char;
-			candidates.push(c.to_string());
-		}
-		let mut candidates = candidates
-			.into_iter()
-			.filter(|n| !forbidden(n))
-			.collect::<Vec<String>>();
-
-		let mut count_index = Vec::new();
-		for e in self.entries.iter() {
-			count_index.push((e.0.clone(), e.1.count));
-		}
-		count_index.sort_by(|a, b| {
-			if b.1 != a.1 {
-				b.1.cmp(&a.1)
-			} else {
-				a.0.cmp(&b.0)
-			}
-		});
-		for k in count_index {
-			match self.entries.get_mut(&k.0) {
-				None => {}, // :WTF:
-				Some(e) => {
-					let cn = match candidates.pop() {
-						None => e.crushed_name.clone(),
-						Some(cn) => cn,
-					};
-					e.set_crushed_name(&cn);
-				},
-			}
-		}
-	}
-	fn get_crushed_name(&self, n: &str) -> Option<String> {
-		self.entries.get(n).map(|a| a.crushed_name.clone())
-	}
-	fn add(&mut self, n: &str) -> u32 {
-		let e = self
-			.entries
-			.entry(n.to_string())
-			.or_insert_with(|| IdentEntry::new(n));
-		e.count += 1;
-		e.count
-	}
-}
-
-#[derive(Debug, PartialEq)]
-enum CounterPhase {
-	Analysing,
-	Crushing,
-}
-
-/// Flat (one namespace) identifier renamer. Interim: replaced by the
-/// scope-aware renamer in a later step.
-struct Counter {
-	phase:                 CounterPhase,
-	/// Names pinned by `protect` (macros, OFF regions, blocklist, blocks,
-	/// built-in members seen as selectors).
-	pinned:                HashSet<String>,
-	verbose:               bool,
-	identifiers_crushed:   IdentMap,
-	identifiers_uncrushed: IdentMap,
-}
-
-impl Counter {
-	pub fn new(protection: &Protection, verbose: bool) -> Counter {
-		let mut pinned = protection.names.clone();
-		pinned.extend(protection.field_names.iter().cloned());
-		Counter {
-			phase: CounterPhase::Analysing,
-			pinned,
-			verbose,
-			identifiers_crushed: IdentMap::new(),
-			identifiers_uncrushed: IdentMap::new(),
-		}
-	}
-
-	/// A name that must not be used for anything else in this shader.
-	fn is_pinned(&self, n: &str) -> bool {
-		is_reserved(n)
-			|| is_keyword(n)
-			|| is_builtin_function(n)
-			|| is_swizzle(n)
-			|| self.pinned.contains(n)
-	}
-
-	pub fn crush_names(&mut self) {
-		let uncrushed = self.identifiers_uncrushed.keys();
-		let pinned = &self.pinned;
-		let forbidden = |n: &str| {
-			never_generate(n)
-				|| is_swizzle(n)
-				|| pinned.contains(n)
-				|| uncrushed.iter().any(|u| u == n)
-		};
-		self.identifiers_crushed.crush(&forbidden);
-	}
-}
-impl VisitorMut for Counter {
-	/// Macro lines are opaque: the name and body identifiers are pinned by
-	/// `protect`, the parameters belong to the line alone.
-	fn visit_preprocessor_define(&mut self, _pd: &mut PreprocessorDefine) -> Visit {
-		Visit::Parent
-	}
-
-	/// `layout(location = 0)`: the qualifier name is an identifier to the
-	/// parser but a keyword to the compiler; only the value is an expression.
-	fn visit_layout_qualifier_spec(&mut self, l: &mut LayoutQualifierSpec) -> Visit {
-		if let LayoutQualifierSpec::Identifier(_, Some(e)) = l {
-			e.visit_mut(self);
-		}
-		Visit::Parent
-	}
-
-	fn visit_identifier(&mut self, e: &mut Identifier) -> Visit {
-		let Identifier(i) = e;
-		match self.phase {
-			CounterPhase::Crushing => {
-				if let Some(n) = self.identifiers_crushed.get_crushed_name(i) {
-					if self.verbose {
-						eprintln!("Identifier: Replacing {:?} with {:?}", i, n);
-					}
-					*e = Identifier(n);
-				}
-			},
-			CounterPhase::Analysing => {
-				self.add_identifier(&i.clone());
-			},
-		}
-		Visit::Children
-	}
-	fn visit_type_name(&mut self, tn: &mut TypeName) -> Visit {
-		let TypeName(i) = tn;
-		match self.phase {
-			CounterPhase::Crushing => {
-				if let Some(n) = self.identifiers_crushed.get_crushed_name(i) {
-					if self.verbose {
-						eprintln!("TypeName/Identifier: Replacing {:?} with {:?}", i, n);
-					}
-					*tn = TypeName(n);
-				}
-			},
-			CounterPhase::Analysing => {
-				self.add_identifier(&i.clone());
-			},
-		}
-		Visit::Children
-	}
-}
-
-impl Counter {
-	fn add_identifier(&mut self, n: &str) {
-		let pinned = self.is_pinned(n);
-		let c = if pinned {
-			self.identifiers_uncrushed.add(n)
-		} else {
-			self.identifiers_crushed.add(n)
-		};
-		if self.verbose {
-			eprintln!(
-				"{: >8} x {: <20} {}",
-				c,
-				n,
-				if pinned { "[uncrushed]" } else { "[-crushed-]" },
-			);
-		}
-	}
-}
 
 /// Numbers about the last successful crush.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -248,9 +15,9 @@ pub struct Stats {
 	pub output_len:     usize,
 	pub input_entropy:  f32,
 	pub output_entropy: f32,
-	/// Distinct identifiers that got a new name.
+	/// Distinct symbols that got a new name.
 	pub renamed:        usize,
-	/// Distinct identifiers that were kept (keywords, builtins, protected).
+	/// Distinct symbols that kept their name (protected, reserved, ...).
 	pub kept:           usize,
 }
 
@@ -263,7 +30,7 @@ impl fmt::Display for Stats {
 		};
 		write!(
 			f,
-			"{} -> {} bytes ({:.1}%), entropy {:.3} -> {:.3}, {} identifiers renamed, {} kept",
+			"{} -> {} bytes ({:.1}%), entropy {:.3} -> {:.3}, {} symbols renamed, {} kept",
 			self.input_len,
 			self.output_len,
 			pct,
@@ -386,25 +153,28 @@ impl ShaderCrusher {
 			fields.sort();
 			eprintln!("Protected field names: {:?}", fields);
 		}
-
 		if self.options.simplify {
 			simplify::run(&mut stage, &simplify::Flags::default());
 		}
 
-		let mut counter = Counter::new(&protection, verbose);
-		stage.visit_mut(&mut counter);
+		let mut table = scope::resolve(&mut stage, &protection)?;
 		if self.options.rename {
-			counter.crush_names();
+			let text = printer::print(&stage);
+			rename::assign(
+				&mut table,
+				&text,
+				self.options.scoring,
+				self.options.shadowing,
+			);
 		}
-		counter.phase = CounterPhase::Crushing;
-		stage.visit_mut(&mut counter);
+		rename::apply(&mut stage, &table);
 		if verbose {
-			eprintln!("Crushed Varnames: {:?}", counter.identifiers_crushed);
-			eprintln!("Uncrushed Varnames: {:?}", counter.identifiers_uncrushed);
+			table.dump();
 		}
+
 		let out = printer::print(&stage);
 		if self.options.selfcheck {
-			selfcheck::reparse_equals(&out, &stage)?;
+			selfcheck::run(&out, &stage, &table)?;
 		}
 
 		self.output = out;
@@ -413,8 +183,12 @@ impl ShaderCrusher {
 			output_len:     self.output.len(),
 			input_entropy:  entropy::metric_entropy(self.input.as_bytes()),
 			output_entropy: entropy::metric_entropy(self.output.as_bytes()),
-			renamed:        counter.identifiers_crushed.len(),
-			kept:           counter.identifiers_uncrushed.len(),
+			renamed:        table
+				.symbols
+				.iter()
+				.filter(|s| s.new_name.is_some())
+				.count(),
+			kept:           table.symbols.iter().filter(|s| s.pinned.is_some()).count(),
 		};
 		Ok(())
 	}
@@ -565,6 +339,12 @@ mod tests {
 
 	fn crush(src: &str) -> String {
 		crush_str(src, &Options::default()).expect("crush failed").0
+	}
+
+	fn crush_with(src: &str, f: impl FnOnce(&mut Options)) -> String {
+		let mut o = Options::default();
+		f(&mut o);
+		crush_str(src, &o).expect("crush failed").0
 	}
 
 	#[test]
@@ -742,6 +522,142 @@ mod tests {
 			"block instance names are private: {out}"
 		);
 		assert!(!out.contains("in_position"), "{out}");
+	}
+
+	/// The identifier that follows the `n`th occurrence of `prefix`.
+	fn ident_after<'a>(s: &'a str, prefix: &str, n: usize) -> &'a str {
+		let rest = s.split(prefix).nth(n + 1).expect("prefix");
+		let end = rest
+			.find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+			.unwrap_or(rest.len());
+		&rest[..end]
+	}
+
+	#[test]
+	fn locals_reuse_names_of_globals_they_do_not_use() {
+		let src = "uniform float u_one; uniform float u_two; void main() { float local_x = u_one; gl_FragColor = vec4(local_x); }";
+		let out = crush(src);
+		let (one, two) = (
+			ident_after(&out, "uniform float ", 0),
+			ident_after(&out, "uniform float ", 1),
+		);
+		assert_ne!(one, two);
+		// main does not use u_two, so its local may take u_two's name
+		assert_eq!(
+			out,
+			format!("uniform float {one};uniform float {two};void main(){{float {two}={one};gl_FragColor=vec4({two});}}")
+		);
+		let out = crush_with(src, |o| o.shadowing = false);
+		let local = ident_after(&out, "void main(){float ", 0);
+		assert_ne!(local, one);
+		assert_ne!(local, two);
+		assert_eq!(
+			out,
+			format!("uniform float {one};uniform float {two};void main(){{float {local}={one};gl_FragColor=vec4({local});}}")
+		);
+	}
+
+	#[test]
+	fn initializers_keep_binding_to_the_outer_name() {
+		let out = crush("float v_outer = 1.; void main() { float v_outer = v_outer * 2.; gl_FragColor = vec4(v_outer); }");
+		let outer = ident_after(&out, "float ", 0);
+		let inner = ident_after(&out, "void main(){float ", 0);
+		assert_ne!(outer, inner, "{out}");
+		assert_eq!(
+			out,
+			format!("float {outer}=1.;void main(){{float {inner}={outer}*2.;gl_FragColor=vec4({inner});}}")
+		);
+	}
+
+	#[test]
+	fn nested_scopes_crush_and_verify() {
+		let out = crush("void main() { for (int i = 0; i < 2; i++) { float k = float(i); } float i = 1.; if (i > 0.) float j = i; else { float j = 2.; } do { float m = i; } while (false); switch (1) { case 1: { int c = 0; } } gl_FragColor = vec4(i); }");
+		assert!(!out.contains(" i ") && !out.contains("float k"), "{out}");
+	}
+
+	#[test]
+	fn twenty_six_locals_get_single_letters() {
+		let mut src = String::from("void main(){float acc=0.;");
+		for i in 0..30 {
+			src.push_str(&format!("float local_{i}={i}.;acc+=local_{i};"));
+		}
+		src.push_str("gl_FragColor=vec4(acc);}");
+		let out = crush(&src);
+		let names: Vec<&str> = out
+			.split("float ")
+			.skip(1)
+			.map(|s| s.split('=').next().unwrap())
+			.collect();
+		assert_eq!(names.len(), 31, "{out}");
+		assert!(names.iter().all(|n| n.len() == 1), "{names:?}");
+		for n in ["x", "y", "z", "r", "g", "b", "a"] {
+			assert!(
+				names.contains(&n),
+				"swizzle letters are valid variable names: {names:?}"
+			);
+		}
+	}
+
+	#[test]
+	fn struct_fields_are_renamed_unless_swizzle_shaped() {
+		let out = crush("struct S { vec3 pos; float w; vec2 uv; }; uniform S s; void main() { gl_FragColor = vec4(s.pos, s.w) + s.uv.xyxy; }");
+		assert!(!out.contains("pos") && !out.contains("uv"), "{out}");
+		assert!(out.contains(".w)"), "{out}");
+		assert!(out.contains("float w;"), "{out}");
+	}
+
+	#[test]
+	fn builtin_named_function_is_kept_but_builtin_named_variable_is_renamed() {
+		let out = crush("float dot(float a, float b) { return a * b; } void main() { float length = 2.; float arr[2]; gl_FragColor = vec4(dot(length, 3.) * float(arr.length())); }");
+		assert!(out.contains("float dot(") && out.contains("dot("), "{out}");
+		assert!(out.contains(".length()"), "{out}");
+		assert!(!out.contains("float length"), "{out}");
+	}
+
+	#[test]
+	fn declarations_duplicated_by_the_preprocessor_rename_consistently() {
+		let out = crush("#ifdef A\nuniform float dup_u;\n#else\nuniform float dup_u;\n#endif\nvoid main(){gl_FragColor=vec4(dup_u);}");
+		assert!(!out.contains("dup_u"), "{out}");
+		let decls: Vec<&str> = out.lines().filter(|l| l.starts_with("uniform")).collect();
+		assert_eq!(decls.len(), 2);
+		assert_eq!(decls[0], decls[1], "{out}");
+	}
+
+	#[test]
+	fn overloads_prototypes_and_definitions_share_one_name() {
+		let out = crush("float f_over(float a); float f_over(float a) { return a; } float f_over(vec2 a) { return a.x; } void main() { gl_FragColor = vec4(f_over(1.) + f_over(vec2(1.))); }");
+		assert!(!out.contains("f_over"), "{out}");
+		let name = out
+			.split("float ")
+			.nth(1)
+			.unwrap()
+			.split('(')
+			.next()
+			.unwrap();
+		assert_eq!(out.matches(&format!("float {name}(")).count(), 3, "{out}");
+		assert_eq!(out.matches(&format!("{name}(")).count(), 5, "{out}");
+	}
+
+	#[test]
+	fn invariant_redeclarations_follow_the_rename() {
+		let out = crush("varying vec4 Color1; invariant Color1; invariant gl_Position; void main() { Color1 = vec4(1.); }");
+		assert!(!out.contains("Color1"), "{out}");
+		assert!(out.contains("invariant gl_Position;"), "{out}");
+		let name = out
+			.split("varying vec4 ")
+			.nth(1)
+			.unwrap()
+			.split(';')
+			.next()
+			.unwrap();
+		assert!(out.contains(&format!("invariant {name};")), "{out}");
+	}
+
+	#[test]
+	fn struct_and_array_constructors_resolve() {
+		let out = crush("struct S { float val; }; void main() { S arr[2] = S[2](S(1.), S(2.)); float f[2] = float[2](1., 2.); gl_FragColor = vec4(arr[0].val, f[1], 0., 1.); }");
+		assert!(out.contains("[2](") && out.contains("float[2]("), "{out}");
+		assert!(!out.contains("val"), "{out}");
 	}
 
 	#[test]

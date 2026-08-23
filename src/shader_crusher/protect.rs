@@ -1,10 +1,9 @@
 //! Names that must not be renamed because of things the AST walker cannot
-//! see: preprocessor text, `#pragma SHADER_CRUSHER_OFF` regions, the
-//! caller's blocklist, interface blocks and built-in structure members.
+//! see: preprocessor text, `#pragma SHADER_CRUSHER_OFF` regions and the
+//! caller's blocklist.
 
 use std::collections::HashSet;
 
-use super::builtins::is_builtin_member;
 use super::lexer;
 use super::CrushError;
 use crate::glsl::syntax::*;
@@ -35,23 +34,6 @@ impl Visitor for Collect {
 	}
 }
 
-/// Collects `.member` selectors that name a member of a built-in structure.
-#[derive(Default)]
-struct BuiltinMembers {
-	names: HashSet<String>,
-}
-
-impl Visitor for BuiltinMembers {
-	fn visit_expr(&mut self, e: &Expr) -> Visit {
-		if let Expr::Dot(_, Identifier(f)) = e {
-			if is_builtin_member(f) {
-				self.names.insert(f.clone());
-			}
-		}
-		Visit::Children
-	}
-}
-
 fn pragma_command(ed: &ExternalDeclaration) -> Option<&str> {
 	match ed {
 		ExternalDeclaration::Preprocessor(Preprocessor::Pragma(p)) => Some(p.command.trim()),
@@ -66,10 +48,7 @@ fn pragma_command(ed: &ExternalDeclaration) -> Option<&str> {
 /// - macro names, the identifiers in macro bodies and in `#if`/`#elif`
 ///   conditions, `#ifdef`/`#ifndef`/`#undef` names are pinned (macro
 ///   parameters are not: they are local to the `#define` line and the
-///   crusher never touches that line);
-/// - interface block names and members are pinned (API-visible);
-/// - built-in structure members that appear as `.member` are pinned as
-///   field names.
+///   crusher never touches that line).
 pub fn run(tu: &mut TranslationUnit, blocklist: &[String]) -> Result<Protection, CrushError> {
 	let mut p = Protection::default();
 	p.names.insert("main".to_string());
@@ -95,8 +74,8 @@ pub fn run(tu: &mut TranslationUnit, blocklist: &[String]) -> Result<Protection,
 			p.field_names.extend(c.names.iter().cloned());
 			p.names.extend(c.names);
 		}
-		match &ed {
-			ExternalDeclaration::Preprocessor(pp) => match pp {
+		if let ExternalDeclaration::Preprocessor(pp) = &ed {
+			match pp {
 				Preprocessor::Define(PreprocessorDefine::ObjectLike { ident, value }) => {
 					p.names.insert(ident.0.clone());
 					for id in lexer::identifiers(value) {
@@ -138,17 +117,7 @@ pub fn run(tu: &mut TranslationUnit, blocklist: &[String]) -> Result<Protection,
 					);
 				},
 				_ => {},
-			},
-			ExternalDeclaration::Declaration(Declaration::Block(b)) => {
-				p.names.insert(b.name.0.clone());
-				for f in &b.fields {
-					for id in &f.identifiers.0 {
-						p.names.insert(id.ident.0.clone());
-						p.field_names.insert(id.ident.0.clone());
-					}
-				}
-			},
-			_ => {},
+			}
 		}
 		keep.push(ed);
 	}
@@ -158,10 +127,6 @@ pub fn run(tu: &mut TranslationUnit, blocklist: &[String]) -> Result<Protection,
 		));
 	}
 	tu.0 .0 = keep;
-
-	let mut m = BuiltinMembers::default();
-	tu.visit(&mut m);
-	p.field_names.extend(m.names);
 	Ok(p)
 }
 
@@ -208,22 +173,6 @@ mod tests {
 		}
 		assert!(!p.names.contains("v"), "macro parameter must not be pinned");
 		assert!(p.field_names.contains("scale_factor"));
-	}
-
-	#[test]
-	fn blocks_and_builtin_members_are_pinned() {
-		let (p, _) = protect(
-			"uniform Light { vec4 light_pos; } light_src;\nstruct S { float intensity; };\nvoid main(){ S s; gl_FragColor = gl_LightSource[0].position + vec4(s.intensity) + gl_FrontMaterial.diffuse; }\n",
-		);
-		assert!(p.names.contains("Light"));
-		assert!(p.names.contains("light_pos"));
-		assert!(
-			!p.names.contains("light_src"),
-			"block instance names are shader-private"
-		);
-		assert!(p.field_names.contains("position"));
-		assert!(p.field_names.contains("diffuse"));
-		assert!(!p.field_names.contains("intensity"));
 	}
 
 	#[test]

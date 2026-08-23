@@ -2,4 +2,4 @@
 #define SQ(v) ((v)*(v))
 #define NEG(q) -(q)
 #define HALF (scale_factor*0.5)
-uniform float scale_factor;uniform sampler2D i;precision mediump float;struct h{vec3 position;float k;};uniform h f;varying vec2 l;float j(float m){float c=m*2.;return c;}void main(){float c=.5;vec2 e=l.xy*1e2+.001;vec3 p=f.position+gl_LightSource[0].position.xyz;float x=p.x+p.y,a=SQ(e.x+1.)+NEG(c)+HALF+j(.25)- -c;vec4 d=texture2D(i,e)*(x,a);d.rgb=d.bgr*f.k;gl_FragColor=(d,vec4(x,a,e,1e-5));gl_Position=ftransform();}
+uniform float scale_factor;uniform sampler2D e;precision mediump float;struct o{vec3 e;float o;};uniform o r;varying vec2 t;float f(float e){float o=e*2.;return o;}void main(){float o=.5;vec2 i=t.xy*1e2+.001;vec3 a=r.e+gl_LightSource[0].position.xyz;float l=a.x+a.y,n=SQ(i.x+1.)+NEG(o)+HALF+f(.25)- -o;vec4 v=texture2D(e,i)*(l,n);v.rgb=v.bgr*r.o;gl_FragColor=(v,vec4(l,n,i,1e-5));gl_Position=ftransform();}
