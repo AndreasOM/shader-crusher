@@ -1,2 +1,2 @@
 #version 410
-void main(){float x=1.;float y=.5;vec2 r=vec2(.3,.7);if(x-y>0.&&r.y<x&&r.y>y){gl_FragColor=vec4(1.,0.,0.,1.);}if(x>1.||y<.5||r.x>.5){gl_FragColor=vec4(0.,1.,0.,1.);}if(x>.5&&y<1.||r.x>.2&&r.y<.8){gl_FragColor=vec4(0.,0.,1.,1.);}if(!(x<y)&&!(r.x>1.)){gl_FragColor=vec4(1.,1.,0.,1.);}}
+void main(){float x=1.,y=.5;vec2 r=vec2(.3,.7);if(x-y>0.&&r.y<x&&r.y>y)gl_FragColor=vec4(1.,0.,0.,1.);if(x>1.||y<.5||r.x>.5)gl_FragColor=vec4(0.,1.,0.,1.);if(x>.5&&y<1.||r.x>.2&&r.y<.8)gl_FragColor=vec4(0.,0.,1.,1.);if(!(x<y)&&!(r.x>1.))gl_FragColor=vec4(1.,1.,0.,1.);}

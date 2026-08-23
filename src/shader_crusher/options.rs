@@ -22,6 +22,8 @@ impl Scoring {
 	}
 }
 
+pub use super::simplify::Flags as Rewrites;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Options {
 	/// Identifiers that are never renamed (in addition to keywords, builtins
@@ -33,6 +35,8 @@ pub struct Options {
 	pub rename:    bool,
 	/// Apply AST-level rewrites (`(void)` → `()`, declaration merging, ...).
 	pub simplify:  bool,
+	/// Which rewrites `simplify` applies.
+	pub rewrites:  Rewrites,
 	/// Let a local reuse the name of an outer symbol that is not referenced
 	/// inside its scope (spec-legal in every GLSL version). Off = locals
 	/// never reuse names of globals, functions or types.
@@ -50,6 +54,7 @@ impl Default for Options {
 			verbose:   false,
 			rename:    true,
 			simplify:  true,
+			rewrites:  Rewrites::default(),
 			shadowing: true,
 			scoring:   Scoring::BigramCount,
 			selfcheck: true,

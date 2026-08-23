@@ -12,5 +12,5 @@ mod shadercrusher;
 mod simplify;
 
 pub use error::CrushError;
-pub use options::{Options, Scoring};
+pub use options::{Options, Rewrites, Scoring};
 pub use shadercrusher::{crush_str, ShaderCrusher, Stats};

@@ -2,7 +2,7 @@ use std::fs;
 use std::io::Write;
 
 use clap::{Arg, ArgAction, Command};
-use shader_crusher::{Options, Scoring, ShaderCrusher};
+use shader_crusher::{Options, Rewrites, Scoring, ShaderCrusher};
 
 pub fn main() {
 	let matches = Command::new("shader-crusher")
@@ -49,6 +49,15 @@ pub fn main() {
 						.long("no-simplify")
 						.action(ArgAction::SetTrue)
 						.help("Do not apply AST-level rewrites"),
+				)
+				.arg(
+					Arg::new("no-rewrite")
+						.long("no-rewrite")
+						.value_name("NAMES")
+						.help(format!(
+							"Comma separated rewrites to skip: {}",
+							Rewrites::NAMES.join(", ")
+						)),
 				)
 				.arg(
 					Arg::new("no-shadowing")
@@ -104,17 +113,31 @@ pub fn main() {
 		eprintln!("{}", data);
 	}
 
+	let mut rewrites = Rewrites::default();
+	if let Some(names) = sub_matches.get_one::<String>("no-rewrite") {
+		for name in names.split(',').map(str::trim).filter(|n| !n.is_empty()) {
+			if !rewrites.disable(name) {
+				eprintln!(
+					"error: unknown rewrite {:?}; known: {}",
+					name,
+					Rewrites::NAMES.join(", ")
+				);
+				std::process::exit(1);
+			}
+		}
+	}
 	let opts = Options {
 		blocklist: sub_matches
 			.get_one::<String>("blocklist")
 			.map(|bl| bl.split(',').map(|s| s.to_string()).collect())
 			.unwrap_or_default(),
-		verbose:   sub_matches.get_flag("verbose"),
-		rename:    !sub_matches.get_flag("no-rename"),
-		simplify:  !sub_matches.get_flag("no-simplify"),
+		verbose: sub_matches.get_flag("verbose"),
+		rename: !sub_matches.get_flag("no-rename"),
+		simplify: !sub_matches.get_flag("no-simplify"),
+		rewrites,
 		shadowing: !sub_matches.get_flag("no-shadowing"),
 		selfcheck: !sub_matches.get_flag("no-selfcheck"),
-		scoring:   Scoring::parse(sub_matches.get_one::<String>("score").unwrap()).unwrap(),
+		scoring: Scoring::parse(sub_matches.get_one::<String>("score").unwrap()).unwrap(),
 	};
 
 	let mut sc = ShaderCrusher::with_options(opts);

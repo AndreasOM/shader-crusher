@@ -1,2 +1,2 @@
 #version 410
-void main(){float v=1.;float m=2.;float y=3.;float x=4.;float r=5.;float o=v+m*(y+x*(r-v));float a=(v+m)*(y-x)/(r+v-m*y);float l=max(min(v,m),min(y,x));vec2 f=vec2(v,m);vec2 t=vec2(y,x);float e=(f.x+t.y)*(f.y-t.x);float c=v>m?y>x?r:v:m>y?x:r;bool i=v>m&&y<x||r>=v&&m<=y;vec4 n=vec4(vec3(v,m,y),x);float g=max(v*m+y,min(x/r,(v+m)*(y-x)));gl_FragColor=vec4(o,a,l,1.);}
+void main(){float v=1.,m=2.,y=3.,x=4.,r=5.,o=v+m*(y+x*(r-v)),e=(v+m)*(y-x)/(r+v-m*y),a=max(min(v,m),min(y,x));vec2 c=vec2(v,m),i=vec2(y,x);float l=(c.x+i.y)*(c.y-i.x),n=v>m?y>x?r:v:m>y?x:r;bool f=v>m&&y<x||r>=v&&m<=y;vec4 t=vec4(vec3(v,m,y),x);float g=max(v*m+y,min(x/r,(v+m)*(y-x)));gl_FragColor=vec4(o,e,a,1.);}

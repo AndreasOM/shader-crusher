@@ -1,2 +1,2 @@
 #version 410
-uniform vec4 v;uniform vec2 g;void main(){float r=v.r;float m=v.g;float o=v.b;vec3 a=v.rgb;float l=(v+vec4(.1)).g;vec2 f=g.xy;float e=v.r+v.g;float t=normalize(v).r;float c=g.x*g.y;gl_FragColor=vec4(r,m,o,1.);}
+uniform vec4 v;uniform vec2 n;void main(){float r=v.r,g=v.g,o=v.b;vec3 m=v.rgb;float e=(v+vec4(.1)).g;vec2 a=n.xy;float c=v.r+v.g,i=normalize(v).r,l=n.x*n.y;gl_FragColor=vec4(r,g,o,1.);}

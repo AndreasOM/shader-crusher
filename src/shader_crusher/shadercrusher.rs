@@ -154,7 +154,7 @@ impl ShaderCrusher {
 			eprintln!("Protected field names: {:?}", fields);
 		}
 		if self.options.simplify {
-			simplify::run(&mut stage, &simplify::Flags::default());
+			simplify::run(&mut stage, &self.options.rewrites);
 		}
 
 		let mut table = scope::resolve(&mut stage, &protection)?;
@@ -488,7 +488,7 @@ mod tests {
 		assert!(out.contains("#define NEG(q) -(q)\n"), "{out}");
 		assert!(out.contains("#define HALF (scale_factor*0.5)\n"), "{out}");
 		assert!(
-			out.contains("uniform float scale_factor;"),
+			out.contains("uniform float scale_factor,"),
 			"macro body reference must pin the uniform: {out}"
 		);
 		assert!(!out.contains("other_value"), "{out}");
@@ -539,24 +539,27 @@ mod tests {
 	#[test]
 	fn locals_reuse_names_of_globals_they_do_not_use() {
 		let src = "uniform float u_one; uniform float u_two; void main() { float local_x = u_one; gl_FragColor = vec4(local_x); }";
-		let out = crush(src);
+		let out = crush_with(src, |o| o.scoring = Scoring::Frequency);
 		let (one, two) = (
 			ident_after(&out, "uniform float ", 0),
-			ident_after(&out, "uniform float ", 1),
+			ident_after(&out, ",", 0),
 		);
 		assert_ne!(one, two);
 		// main does not use u_two, so its local may take u_two's name
 		assert_eq!(
 			out,
-			format!("uniform float {one};uniform float {two};void main(){{float {two}={one};gl_FragColor=vec4({two});}}")
+			format!("uniform float {one},{two};void main(){{float {two}={one};gl_FragColor=vec4({two});}}")
 		);
-		let out = crush_with(src, |o| o.shadowing = false);
+		let out = crush_with(src, |o| {
+			o.shadowing = false;
+			o.scoring = Scoring::Frequency;
+		});
 		let local = ident_after(&out, "void main(){float ", 0);
 		assert_ne!(local, one);
 		assert_ne!(local, two);
 		assert_eq!(
 			out,
-			format!("uniform float {one};uniform float {two};void main(){{float {local}={one};gl_FragColor=vec4({local});}}")
+			format!("uniform float {one},{two};void main(){{float {local}={one};gl_FragColor=vec4({local});}}")
 		);
 	}
 
@@ -586,10 +589,12 @@ mod tests {
 		}
 		src.push_str("gl_FragColor=vec4(acc);}");
 		let out = crush(&src);
+		// every declarator of every `float ...;` declaration
 		let names: Vec<&str> = out
 			.split("float ")
 			.skip(1)
-			.map(|s| s.split('=').next().unwrap())
+			.flat_map(|s| s.split(';').next().unwrap().split(','))
+			.map(|d| d.split('=').next().unwrap())
 			.collect();
 		assert_eq!(names.len(), 31, "{out}");
 		assert!(names.iter().all(|n| n.len() == 1), "{names:?}");
