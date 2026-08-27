@@ -2,8 +2,10 @@
 //! tree the crusher meant to print, and every identifier in it must bind
 //! the way the original did.
 
+use std::collections::HashMap;
+
 use super::protect::Protection;
-use super::scope::{self, SymbolTable};
+use super::scope::{self, Symbol, SymbolKind, SymbolTable};
 use super::CrushError;
 use crate::glsl::parser::parse_translation_unit_with_rest;
 use crate::glsl::syntax::{ExternalDeclaration, TranslationUnit};
@@ -113,6 +115,51 @@ pub fn scope_isomorphic(tu: &TranslationUnit, table: &SymbolTable) -> Result<(),
 	Ok(())
 }
 
+/// A struct type name must not be shared with any other symbol.
+///
+/// GLSL compilers lex a visible type name as TYPE_NAME rather than
+/// IDENTIFIER, so a variable, parameter, function or struct member spelled
+/// like a type in scope makes the driver parse the next statement as a
+/// declaration, even where the spec allows the shadowing (and where
+/// `scope_isomorphic` therefore sees nothing wrong). A collision that the
+/// input already had is left alone: the crusher did not introduce it.
+pub fn type_names_distinct(table: &SymbolTable) -> Result<(), CrushError> {
+	let final_name = |s: &Symbol| s.new_name.as_deref().unwrap_or(&s.name).to_string();
+	let mut types: HashMap<String, Vec<usize>> = HashMap::new();
+	for (i, s) in table.symbols.iter().enumerate() {
+		if s.kind == SymbolKind::StructType {
+			types.entry(final_name(s)).or_default().push(i);
+		}
+	}
+	if types.is_empty() {
+		return Ok(());
+	}
+	for (i, x) in table.symbols.iter().enumerate() {
+		let name = final_name(x);
+		let Some(bucket) = types.get(&name) else {
+			continue;
+		};
+		for &t in bucket {
+			if t == i {
+				continue;
+			}
+			let ty = &table.symbols[t];
+			if ty.name != x.name {
+				return Err(CrushError::NameCollision(format!(
+					"struct type {} (now {}) and {:?} {} (now {}) are both called {}",
+					ty.name,
+					final_name(ty),
+					x.kind,
+					x.name,
+					name,
+					name
+				)));
+			}
+		}
+	}
+	Ok(())
+}
+
 /// The full self-check: re-parse, compare the tree, compare the binding.
 pub fn run(
 	output: &str,
@@ -149,6 +196,44 @@ mod tests {
 			reparse_equals("float a=1.;@@", &tu),
 			Err(CrushError::Reparse(_))
 		));
+	}
+
+	#[test]
+	fn detects_introduced_type_collisions() {
+		let mut tu =
+			TranslationUnit::parse("struct S { float v; }; void main() { S s; float x; }").unwrap();
+		let mut table = scope::resolve(&mut tu, &Protection::default()).unwrap();
+		assert!(type_names_distinct(&table).is_ok());
+		let ty = table
+			.symbols
+			.iter()
+			.position(|s| s.kind == SymbolKind::StructType)
+			.unwrap();
+		let var = table.symbols.iter().position(|s| s.name == "x").unwrap();
+		let field = table.symbols.iter().position(|s| s.name == "v").unwrap();
+		table.symbols[ty].new_name = Some("t".to_string());
+		table.symbols[var].new_name = Some("u".to_string());
+		assert!(type_names_distinct(&table).is_ok());
+		// a variable spelled like the type
+		table.symbols[var].new_name = Some("t".to_string());
+		assert!(matches!(
+			type_names_distinct(&table),
+			Err(CrushError::NameCollision(_))
+		));
+		table.symbols[var].new_name = Some("u".to_string());
+		// a field spelled like the type
+		table.symbols[field].new_name = Some("t".to_string());
+		assert!(matches!(
+			type_names_distinct(&table),
+			Err(CrushError::NameCollision(_))
+		));
+		table.symbols[field].new_name = Some("w".to_string());
+		assert!(type_names_distinct(&table).is_ok());
+		// a collision the input already had is not ours to report
+		table.symbols[ty].new_name = None;
+		table.symbols[var].new_name = None;
+		table.symbols[var].name = "S".to_string();
+		assert!(type_names_distinct(&table).is_ok());
 	}
 
 	#[test]

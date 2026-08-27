@@ -16,6 +16,8 @@ pub enum CrushError {
 	AstMismatch(String),
 	/// Re-resolving the crushed output binds identifiers differently.
 	ScopeMismatch(String),
+	/// The renamer gave one name to two symbols that must not share one.
+	NameCollision(String),
 	/// Valid GLSL the crusher does not handle yet.
 	Unsupported(String),
 	/// More symbols than the sentinel encoding can address.
@@ -28,7 +30,10 @@ impl CrushError {
 	pub fn exit_code(&self) -> i32 {
 		match self {
 			CrushError::Parse(_) | CrushError::PartialParse { .. } => 1,
-			CrushError::Reparse(_) | CrushError::AstMismatch(_) | CrushError::ScopeMismatch(_) => 2,
+			CrushError::Reparse(_)
+			| CrushError::AstMismatch(_)
+			| CrushError::ScopeMismatch(_)
+			| CrushError::NameCollision(_) => 2,
 			CrushError::Unsupported(_) | CrushError::TooManySymbols(_) => 3,
 		}
 	}
@@ -51,6 +56,9 @@ impl fmt::Display for CrushError {
 			},
 			CrushError::ScopeMismatch(info) => {
 				write!(f, "self-check: identifiers resolve differently: {}", info)
+			},
+			CrushError::NameCollision(info) => {
+				write!(f, "self-check: renaming collision: {}", info)
 			},
 			CrushError::Unsupported(info) => write!(f, "unsupported: {}", info),
 			CrushError::TooManySymbols(n) => write!(f, "too many symbols ({})", n),

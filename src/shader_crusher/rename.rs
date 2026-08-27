@@ -10,6 +10,14 @@
 //!
 //! Struct fields get names from a separate pool, shared across all structs
 //! so that equally named fields of different structs stay equally named.
+//!
+//! Struct *type* names are allocated first and reserved for the whole shader:
+//! GLSL compilers feed declared type names back into the lexer (a visible type
+//! name lexes as TYPE_NAME, not IDENTIFIER), so a variable, parameter or field
+//! spelled like a type in scope makes the driver read the next statement as a
+//! declaration — `struct t{...}; int t=0; while(t<9)` is a syntax error there,
+//! even though the GLSL spec allows the shadowing and re-resolving the output
+//! binds it correctly.
 
 use std::collections::{HashMap, HashSet};
 
@@ -200,6 +208,47 @@ impl<'a> Renamer<'a> {
 		name
 	}
 
+	/// Give every renamable struct type a name and take it out of `pool` for
+	/// good: no variable, parameter, function or field may be spelled like a
+	/// type that is visible to the driver's lexer (see the module doc).
+	fn reserve_type_names(&mut self, pool: &mut Vec<String>) {
+		let types: Vec<SymbolId> = (0..self.table.symbols.len() as SymbolId)
+			.filter(|&i| {
+				let s = &self.table.symbols[i as usize];
+				s.kind == SymbolKind::StructType && s.pinned.is_none()
+			})
+			.collect();
+		if types.is_empty() {
+			return;
+		}
+		// spellings that survive on struct members: a type must avoid them, but
+		// they stay available to variables (a variable never lexes as a type)
+		let mut kept_fields = self.table.pinned_field_names.clone();
+		for s in &self.table.symbols {
+			if matches!(s.kind, SymbolKind::Field(_)) && s.pinned.is_some() {
+				kept_fields.insert(s.name.clone());
+			}
+		}
+		let mut type_pool: Vec<String> = pool
+			.iter()
+			.filter(|n| !kept_fields.contains(*n))
+			.cloned()
+			.collect();
+		let mut chosen: HashSet<String> = HashSet::new();
+		for sym in types {
+			// the loop only ever repeats for a `triple()`, which is never reused
+			let name = loop {
+				let n = self.choose(sym, &mut type_pool);
+				if !kept_fields.contains(&n) {
+					break n;
+				}
+			};
+			self.table.symbols[sym as usize].new_name = Some(name.clone());
+			chosen.insert(name);
+		}
+		pool.retain(|n| !chosen.contains(n));
+	}
+
 	fn visit_scope(
 		&mut self,
 		scope: ScopeId,
@@ -225,7 +274,12 @@ impl<'a> Renamer<'a> {
 		}
 		for sym in self.table.scopes[sc].symbols.clone() {
 			let s = &self.table.symbols[sym as usize];
-			if s.pinned.is_some() || matches!(s.kind, SymbolKind::Field(_)) {
+			// types are pre-assigned in `assign` and never enter `live`, so their
+			// names can never be freed for reuse by an inner scope
+			if s.pinned.is_some()
+				|| matches!(s.kind, SymbolKind::Field(_))
+				|| s.kind == SymbolKind::StructType
+			{
 				continue;
 			}
 			let name = self.choose(sym, &mut avail);
@@ -242,6 +296,10 @@ impl<'a> Renamer<'a> {
 		for s in &self.table.symbols {
 			if matches!(s.kind, SymbolKind::Field(_)) && s.pinned.is_some() {
 				forbidden.insert(s.name.clone());
+			}
+			// `float t;` inside a struct would lex as a type if `t` names one
+			if s.kind == SymbolKind::StructType {
+				forbidden.insert(s.new_name.clone().unwrap_or_else(|| s.name.clone()));
 			}
 		}
 		let mut pool: Vec<String> = self.letters.iter().map(|c| c.to_string()).collect();
@@ -299,7 +357,8 @@ pub fn assign(table: &mut SymbolTable, text: &str, scoring: Scoring, shadowing: 
 		next_triple: 0,
 		bigrams: Bigrams::new(text),
 	};
-	let pool = r.initial_pool();
+	let mut pool = r.initial_pool();
+	r.reserve_type_names(&mut pool);
 	r.visit_scope(0, pool, Vec::new());
 	r.fields();
 }
@@ -358,6 +417,93 @@ mod tests {
 		assert_eq!(&l[..3], &['z', 'y', 'x']);
 		assert_eq!(l[3], 'a');
 		assert_eq!(l.len(), 52);
+	}
+
+	use crate::glsl::parser::Parse;
+	use crate::shader_crusher::printer::print;
+	use crate::shader_crusher::protect::Protection;
+	use crate::shader_crusher::scope;
+	use crate::shader_crusher::selfcheck::type_names_distinct;
+
+	/// Resolve `src`, assign names with the given options, return the table.
+	fn assigned(src: &str, scoring: Scoring, shadowing: bool) -> SymbolTable {
+		let mut tu = TranslationUnit::parse(src).expect("parse");
+		let mut table = scope::resolve(&mut tu, &Protection::default()).expect("resolve");
+		let text = print(&tu);
+		assign(&mut table, &text, scoring, shadowing);
+		table
+	}
+
+	fn finals(
+		table: &SymbolTable,
+		of: impl Fn(&crate::shader_crusher::scope::Symbol) -> bool,
+	) -> Vec<String> {
+		table
+			.symbols
+			.iter()
+			.filter(|s| of(s))
+			.map(|s| s.new_name.clone().unwrap_or_else(|| s.name.clone()))
+			.collect()
+	}
+
+	#[test]
+	fn type_names_are_never_reused_by_any_symbol() {
+		let src = "#version 410\nout vec4 out_color;\nstruct S { float v; };\nfloat f() { int i = 0; while (i < 9) i += 1; return float(i); }\nvoid main() { S s; s.v = f(); out_color = vec4(s.v); }\n";
+		for shadowing in [true, false] {
+			for scoring in [Scoring::Frequency, Scoring::Bigram, Scoring::BigramCount] {
+				let table = assigned(src, scoring, shadowing);
+				assert!(
+					type_names_distinct(&table).is_ok(),
+					"{scoring:?} {shadowing}"
+				);
+				let types = finals(&table, |s| s.kind == SymbolKind::StructType);
+				assert_eq!(types.len(), 1);
+				let others = finals(&table, |s| s.kind != SymbolKind::StructType);
+				assert!(
+					!others.contains(&types[0]),
+					"{scoring:?} {shadowing}: type {} also used by {others:?}",
+					types[0]
+				);
+			}
+		}
+	}
+
+	#[test]
+	fn local_struct_type_does_not_take_a_freed_outer_name() {
+		// `unused_outer` is not referenced inside main, so its name is freed
+		// there; the struct type declared in main must not receive it
+		let table = assigned(
+			"uniform float unused_outer; void main() { struct L { float a; } l; l.a = 1.; gl_FragColor = vec4(l.a); }",
+			Scoring::BigramCount,
+			true,
+		);
+		assert!(type_names_distinct(&table).is_ok());
+		let ty = finals(&table, |s| s.kind == SymbolKind::StructType);
+		let outer = finals(&table, |s| s.name == "unused_outer");
+		assert_ne!(ty[0], outer[0], "type took the freed outer name");
+	}
+
+	#[test]
+	fn fields_are_never_spelled_like_a_type() {
+		// `x` is a swizzle-shaped field: it keeps its name, so no type may take it
+		let table = assigned(
+			"struct A { float x; float second; }; struct B { float third; }; uniform A a; uniform B b; void main() { gl_FragColor = vec4(a.x + a.second + b.third); }",
+			Scoring::BigramCount,
+			true,
+		);
+		assert!(type_names_distinct(&table).is_ok());
+		let types = finals(&table, |s| s.kind == SymbolKind::StructType);
+		let fields = finals(&table, |s| matches!(s.kind, SymbolKind::Field(_)));
+		assert!(
+			fields.contains(&"x".to_string()),
+			"swizzle-shaped field kept: {fields:?}"
+		);
+		for t in &types {
+			assert!(
+				!fields.contains(t),
+				"type {t} also names a field: {fields:?}"
+			);
+		}
 	}
 
 	#[test]

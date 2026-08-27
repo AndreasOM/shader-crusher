@@ -181,6 +181,9 @@ impl ShaderCrusher {
 				self.options.shadowing,
 			);
 		}
+		// cheap and unconditional: the expensive self-check below cannot see this
+		// class of breakage, because the shadowing it produces is spec-legal
+		selfcheck::type_names_distinct(&table)?;
 		rename::apply(&mut stage, &table);
 		if verbose {
 			table.dump();
@@ -688,6 +691,58 @@ mod tests {
 		let out = crush("struct S { float val; }; void main() { S arr[2] = S[2](S(1.), S(2.)); float f[2] = float[2](1., 2.); gl_FragColor = vec4(arr[0].val, f[1], 0., 1.); }");
 		assert!(out.contains("[2](") && out.contains("float[2]("), "{out}");
 		assert!(!out.contains("val"), "{out}");
+	}
+
+	/// Reported 2026-08-27 against 0.7.1-alpha (repro:
+	/// 64/shader-crusher-struct-collision): `struct S`->`t` and the local
+	/// `int i` inside `f()`->`t`, so the driver lexed `t` as a type and
+	/// `while(t<9)` became a syntax error.
+	#[test]
+	fn struct_type_and_local_variable_never_share_a_name() {
+		let src = "#version 410\nout vec4 out_color;\nstruct S { float v; };\nfloat f() { int i = 0; while (i < 9) i += 1; return float(i); }\nvoid main() { S s; s.v = f(); out_color = vec4(s.v); }\n";
+		for shadowing in [true, false] {
+			for scoring in [Scoring::Frequency, Scoring::Bigram, Scoring::BigramCount] {
+				let out = crush_with(src, |o| {
+					o.blocklist = vec!["main".into(), "out_color".into()];
+					o.shadowing = shadowing;
+					o.scoring = scoring;
+				});
+				let ty = ident_after(&out, "struct ", 0);
+				assert!(!ty.is_empty(), "{out}");
+				for decl in ["int ", "float ", "vec4 "] {
+					assert!(
+						!out.contains(&format!("{decl}{ty}="))
+							&& !out.contains(&format!("{decl}{ty};")),
+						"{ty} is the struct type and a variable ({shadowing}, {scoring:?}): {out}"
+					);
+				}
+				assert!(out.contains("out_color"), "{out}");
+				assert!(!out.contains("s.v"), "shader was not crushed: {out}");
+			}
+		}
+	}
+
+	#[test]
+	fn struct_type_names_survive_loops_parameters_and_inner_scopes() {
+		// piglit struct-06.frag shape: a loop variable next to a struct-typed local
+		let out = crush("struct str { float params[4]; };\nvoid main() { str s; for (int i = 0; i < 4; ++i) s.params[i] = 1.0; gl_FragColor = vec4(s.params[0]); }\n");
+		let ty = ident_after(&out, "struct ", 0);
+		assert!(!out.contains(&format!("int {ty}=")), "{out}");
+		// piglit CorrectFuncOverload.vert shape: a parameter next to a struct type
+		let out = crush("struct S2 { float f; };\nfloat process(S2 s2) { return s2.f; }\nvoid main() { gl_Position = vec4(process(S2(1.0))); }\n");
+		let ty = ident_after(&out, "struct ", 0);
+		assert!(
+			!out.contains(&format!("({ty} {ty})")),
+			"parameter named like its type: {out}"
+		);
+		// piglit struct-03.vert shape: a type declared inside a function must not
+		// take a name freed from the enclosing scope
+		let out = crush("vec4 outer_fn(vec4 a, vec4 b) { return vec4(dot(a, b)); }\nvoid main() { struct Inner { float f; } i; i.f = 1.0; gl_Position = vec4(i.f); }\n");
+		let ty = ident_after(&out, "struct ", 0);
+		assert!(
+			!out.contains(&format!("vec4 {ty}(")),
+			"type took the function name: {out}"
+		);
 	}
 
 	#[test]

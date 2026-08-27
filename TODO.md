@@ -4,6 +4,7 @@
 [ ] Parser gaps (patch in src/glsl): `while (bool b = expr)` (`condition` tries `expr` before `condition_assignment`), `m[i,j]` comma in subscript, preprocessor directives inside function bodies.
 
 # TODO
+[ ] Find a validator that catches driver-level breakage: `glslc`/glslang is spec-correct and happily accepts a variable shadowing a struct type, so it would not have caught the 0.7.1-alpha bug. The `--verbose` symbol-table clash scan did.
 [ ] Rewrites that need type knowledge: `vec3(1.,1.,1.)` → `vec3(1)`, `if(c)x=a;else x=b;` → `x=c?a:b;`, `while` → `for`.
 [ ] Top-level declaration hoisting/merging across functions (Shader Minifier does it; interacts with `precision` and `#if`).
 [ ] Measure Crinkler/kkrunchy directly instead of gzip/xz/zstd proxies.
@@ -17,6 +18,10 @@
 ## Unreleased
 
 ## Released
+
+### Version 0.7.2-alpha
+[x] Never give a struct type name to any other symbol (reported 2026-08-27 against 0.7.1-alpha: `struct S`->`t` plus a local `int i`->`t` made drivers read `while(t<9)` as a declaration; every shader with a `struct` was affected)
+[x] Check the type-name invariant unconditionally, also with `--no-selfcheck`: the re-parse self-check cannot see it, because the shadowing it produces is spec-legal
 
 ### Version 0.7.0-alpha
 [x] Vendor the glsl 7.0.0 parser in-tree (BSD-3-Clause); detect silently unparsed input (partial parse is an error)

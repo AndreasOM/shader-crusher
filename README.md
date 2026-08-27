@@ -17,6 +17,8 @@ The goal is the smallest shader *after* compression (Crinkler, kkrunchy, UPX, ..
   `--no-shadowing` turns that off),
 - names are chosen Shader-Minifier style: the letter whose bigrams with the surrounding characters are most frequent
   (`--score count|bigram|freq`),
+- struct **type** names are reserved for the whole shader: drivers lex a visible type name as a type, so no
+  variable, parameter, function or struct member is ever spelled like one (checked on every crush),
 - always-safe rewrites: `float a;float b;` → `float a,b;` (also struct members), `{x;}` → `x;`, `x=x+y` → `x+=y`,
   `(void)` → `()`, `in` dropped from parameters, `+x` → `x`, macro bodies squeezed, shortest float literals
   (`1.0` → `1.`, `0.5` → `.5`, `100.0` → `1e2`),
@@ -125,7 +127,7 @@ Don't forget do include the cbindgen generated header file, and link against the
 
 # Stats
 
-On piglit's 206 crushable `glslparsertest` shaders (183,874 bytes of GLSL 1.10–1.30): 49,091 bytes raw (26.7%),
+On piglit's 206 crushable `glslparsertest` shaders (183,874 bytes of GLSL 1.10–1.30): 49,073 bytes raw (26.7%),
 and vs. 0.6.0-alpha −19% raw, −7% gzip, −6% xz, −8% zstd (see `bench/README.md`). A 4.8 KB ray-marching fragment
 shader crushes to 2,400 bytes / 1,139 gzip.
 
